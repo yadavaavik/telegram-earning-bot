@@ -22,12 +22,17 @@ telegram_app = Application.builder().token(BOT_TOKEN).build()
 
 # START COMMAND
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    username = update.effective_user.username
+    username = update.effective_user.username or "NoUsername"
 
     user = users.find_one({"user_id": user_id})
 
-    if not user:
+    if user:
+        await update.message.reply_text(
+            f"👋 Welcome back {username}!\n\n💰 Balance: {user.get('balance', 0)}\n👥 Referrals: {user.get('referrals', 0)}"
+        )
+    else:
         users.insert_one({
             "user_id": user_id,
             "username": username,
@@ -35,9 +40,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "referrals": 0
         })
 
-    await update.message.reply_text(
-        f"👋 Welcome {username}!\n\n💰 Balance: 0\n👥 Referrals: 0"
-    )
+        await update.message.reply_text(
+            "✅ You are registered!"
+        )
 
 telegram_app.add_handler(CommandHandler("start", start))
 
