@@ -1,45 +1,105 @@
-from utils.helpers import safe_handler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
 from database.mongo import users
-from modules.daily import claim_daily
-from utils.admin import is_admin
+from utils.force_join import check_join
+from utils.helpers import safe_handler
 
 @safe_handler
-async def button_handler(update, context):
-    q = update.callback_query
-    await q.answer()
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
 
-    uid = q.from_user.id
-    data = q.data
+    await query.answer()
 
-    user = await users.find_one({"user_id": uid})
+    # 👉 JOIN CHECK BUTTON
+    if query.data == "check_join":
+        if await check_join(context.bot, user_id):
+            await query.message.edit_text("✅ Joined successfully!\n\nUse /start")
+        else:
+            await query.answer("❌ You haven't joined yet", show_alert=True)
 
-    if data == "balance":
-        await q.edit_message_text(f"{user['balance']}")
+    # 👉 BALANCE
+    elif query.data == "balance":
+        user = await users.find_one({"user_id": user_id})
 
-    elif data == "refer":
-        link = f"https://t.me/{context.bot.username}?start={uid}"
-        await q.edit_message_text(link)
+        text = (
+            f"💰 Balance: ${user['balance']}\n"
+            f"👥 Referrals: {user['referrals']}\n"
+            f"📈 Earned: ${user['earned']}\n"
+            f"💸 Withdrawn: ${user['withdrawn']}"
+        )
 
-    elif data == "daily":
-        ok = await claim_daily(uid)
-        await q.edit_message_text("Done" if ok else "Wait")
+        await query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
 
-    elif data == "withdraw":
+    # 👉 BACK
+    elif query.data == "back":
+        keyboard = [
+            [InlineKeyboardButton("💰 Balance", callback_data="balance")],
+            [InlineKeyboardButton("👥 Refer", callback_data="refer")],
+            [InlineKeyboardButton("🧩 Tasks", callback_data="tasks")],
+            [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")],
+        ]
+
+        import os
+        ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+        if user_id == ADMIN_ID:
+            keyboard.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
+
+        await query.message.edit_text(
+            "🏠 Main Menu",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    # 👉 REFER
+    elif query.data == "refer":
+        bot_username = (await context.bot.get_me()).username
+
+        link = f"https://t.me/{bot_username}?start={user_id}"
+
+        await query.message.edit_text(
+            f"👥 Your Referral Link:\n{link}",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
+
+    # 👉 TASKS
+    elif query.data == "tasks":
+        await query.message.edit_text(
+            "🧩 Tasks coming soon...",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
+
+    # 👉 WITHDRAW
+    elif query.data == "withdraw":
         context.user_data["w"] = True
-        await q.edit_message_text("Send wallet")
 
-    elif data == "tasks":
-        from handlers.tasks import show_tasks
-        await show_tasks(update, context)
+        await query.message.edit_text(
+            "💸 Send your USDT (TRC20) wallet address:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
 
-    elif data.startswith("task_"):
-        from handlers.tasks import do_task
-        await do_task(update, context)
+    # 👉 ADMIN
+    elif query.data == "admin":
+        import os
+        ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-    elif data == "subbot":
-        from handlers.subbot import menu
-        await menu(update, context)
+        if user_id != ADMIN_ID:
+            await query.answer("❌ Not allowed", show_alert=True)
+            return
 
-    elif data == "admin" and is_admin(uid):
-        from handlers.admin import panel
-        await panel(update, context)
+        await query.message.edit_text(
+            "👑 Admin Panel",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
