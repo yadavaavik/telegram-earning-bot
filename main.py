@@ -119,13 +119,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not user:
             return
 
-        # ===== BACK =====
-        if query.data == "back":
-            await query.edit_message_text(
-                "🏠 Main Menu",
-                reply_markup=main_menu(user_id)
-            )
-
         # ===== BALANCE =====
         elif query.data == "balance":
             msg = (
