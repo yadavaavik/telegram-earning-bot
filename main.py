@@ -250,21 +250,22 @@ elif data.startswith("reject_"):
 elif data.startswith("do_task_"):
     task_id = data.split("_")[2]
 
-    task = tasks.find_one({"_id":
-    ObjectId(task_id)})
+    task = tasks.find_one({"_id": ObjectId(task_id)})
 
     if not task:
         await query.answer("Task not found")
         return
+
+# optional protection
+if "completed_tasks" not in user:
+    users.update_one({"user_id": user_id}, {"$set": {"completed_tasks": []}})
 
     await query.edit_message_text(
         f"🧩 Task: {task['title']}\n\n🔗 {task['link']}\n\nAfter completing send:\n/done_{task_id}",
         reply_markup=back_menu()
     )
 
-# optional protection
-if "completed_tasks" not in user:
-    users.update_one({"user_id": user_id}, {"$set": {"completed_tasks": []}})
+
     
 # ========= MESSAGE HANDLER =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
