@@ -155,24 +155,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     rank = 1
     for u in top:
-        text += (
-            f"{rank}. {u.get('name','User')} - "
-            f"${round(u.get('user_earned',0),2)}\n"
-        )
-        rank += 1
-
-    await query.edit_message_text(text, reply_markup=back_menu())
-
-    top = users.find().sort("user_earned", -1).limit(20)
-
-    text = "🏆 Top 20 Earners\n\n"
-
-    rank = 1
-    for u in top:
-        text += (
-            f"{rank}. {u.get('name','User')} - "
-            f"${round(u.get('user_earned',0),2)}\n"
-        )
+        text += f"{rank}. {u.get('name','User')} - ${round(u.get('user_earned',0),2)}\n"
         rank += 1
 
     await query.edit_message_text(text, reply_markup=back_menu())
@@ -297,17 +280,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data.startswith("ban_"):
-    if user_id not in ADMIN_IDS:
-        return
+        if user_id not in ADMIN_IDS:
+            return
 
-    target_id = int(data.split("_")[1])
+        target_id = int(data.split("_")[1])
 
-    users.update_one(
-        {"user_id": target_id},
-        {"$set": {"is_banned": True}}
-    )
+        users.update_one(
+            {"user_id": target_id},
+            {"$set": {"is_banned": True}}
+        )
 
-    await query.edit_message_text("🚫 User banned")
+        await query.edit_message_text("🚫 User banned")
 
     # =========================
     # ➕ ADD TASK
