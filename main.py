@@ -71,7 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             users.insert_one({
                 "user_id": uid,
                 "name": user.first_name,
-                "balance": 0,
+                "balance": 0.0,
                 "referrals": 0,
                 "referred_by": None
             })
@@ -82,7 +82,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if ref_user:
                     users.update_one(
                         {"user_id": ref_id},
-                        {"$inc": {"balance": 10, "referrals": 1}}
+                        "$inc": {"balance": REFERRAL_REWARD, "referrals": 1}}
                     )
                     users.update_one(
                         {"user_id": uid},
@@ -90,7 +90,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
 
         await update.message.reply_text(
-            f"🎉 Welcome {user.first_name}!\nEarn ₹10 per referral 💸",
+            f"🎉 Welcome {user.first_name}!\nEarn $0.10 per referral 💸",
             reply_markup=main_menu(uid)
         )
 
