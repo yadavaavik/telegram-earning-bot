@@ -139,12 +139,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         elif query.data == "withdraw":
-    if user["balance"] < MIN_WITHDRAW:
-        await query.edit_message_text(
-            f"❌ Minimum ${MIN_WITHDRAW}",
-            reply_markup=back_menu()
-        )
-    else:
+            if user["balance"] < MIN_WITHDRAW:
+        elif query.data == "withdraw":
+            if user["balance"] < MIN_WITHDRAW:
+                await query.edit_message_text(
+                    f"❌ Minimum ${MIN_WITHDRAW}",
+                    reply_markup=back_menu()
+                )
+            else:
         context.user_data["awaiting_wallet"] = True
         await query.message.reply_text("💳 Send your wallet address")
 
