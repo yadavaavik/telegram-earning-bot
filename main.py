@@ -100,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except Exception as e:
-        print("START ERROR:", e)
+    print(e)
 
 # ========= BUTTON =========
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -140,15 +140,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif query.data == "withdraw":
             if user["balance"] < MIN_WITHDRAW:
-        elif query.data == "withdraw":
-            if user["balance"] < MIN_WITHDRAW:
                 await query.edit_message_text(
                     f"❌ Minimum ${MIN_WITHDRAW}",
                     reply_markup=back_menu()
                 )
             else:
-        context.user_data["awaiting_wallet"] = True
-        await query.message.reply_text("💳 Send your wallet address")
+                context.user_data["awaiting_wallet"] = True
+               await query.message.reply_text("💳 Send your wallet address")
 
         elif query.data == "admin_panel":
             if user_id not in ADMIN_IDS:
@@ -187,10 +185,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["broadcast"] = True
             await query.message.reply_text("Send message to broadcast")
 
-        # ===== APPROVE WITHDRAW =====
-elif query.data.startswith("approve_"):
+        elif query.data.startswith("approve_"):
     if user_id not in ADMIN_IDS:
         return
+
+    
+        # ===== APPROVE WITHDRAW =====
+
 
     target_id = int(query.data.split("_")[1])
 
@@ -284,7 +285,13 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # ===== WITHDRAW REQUEST =====
-if context.user_data.get("awaiting_wallet"):
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        user_id = update.effective_user.id
+        text = update.message.text
+
+        if context.user_data.get("awaiting_wallet"):
+            user = users.find_one({"user_id": user_id})
     user = users.find_one({"user_id": user_id})
     amount = user["balance"]
 
