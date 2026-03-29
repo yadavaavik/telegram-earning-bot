@@ -1,37 +1,43 @@
+import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-# 👉 ADD YOUR CHANNEL USERNAMES HERE
-CHANNELS = [
-    "@milkyxbubble"
-]
-
-ADMIN_ID = int(__import__("os").getenv("ADMIN_ID", "0"))
+# Get channels from ENV
+def get_channels():
+    channels = os.getenv("FORCE_CHANNELS", "")
+    return [ch.strip() for ch in channels.split(",") if ch.strip()]
 
 
-async def check_join(bot, user_id):
-    # 👉 Admin bypass
-    if user_id == ADMIN_ID:
-        return True
+# Check if user joined all channels
+async def check_force_join(user_id, context):
+    channels = get_channels()
 
-    for ch in CHANNELS:
+    if not channels:
+        return True  # No force join set
+
+    for channel in channels:
         try:
-            member = await bot.get_chat_member(ch, user_id)
+            member = await context.bot.get_chat_member(channel, user_id)
 
             if member.status not in ["member", "administrator", "creator"]:
                 return False
 
-        except:
+        except Exception:
             return False
 
     return True
 
 
-def join_button():
+# Create join buttons
+def get_join_buttons():
+    channels = get_channels()
+
     buttons = []
-
-    for ch in CHANNELS:
-        buttons.append([InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{ch.replace('@','')}")])
-
-    buttons.append([InlineKeyboardButton("✅ I Joined", callback_data="check_join")])
+    for ch in channels:
+        buttons.append([
+            InlineKeyboardButton(
+                f"Join {ch}",
+                url=f"https://t.me/{ch.replace('@','')}"
+            )
+        ])
 
     return InlineKeyboardMarkup(buttons)
