@@ -330,26 +330,33 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text("❌ Rejected")
 
-   # ===== STATS =====
-elif data == "stats":
-    if user_id not in ADMIN_IDS:
-        return
+    # =========================
+    # 📊 STATS (PRO)
+    # =========================
+    elif data == "stats":
+        if user_id not in ADMIN_IDS:
+            return
 
-    total_users = users.count_documents({})
-    total_earned = sum(u.get("user_earned", 0) for u in users.find())
-    total_withdrawn = sum(u.get("user_withdrawn", 0) for u in users.find())
+        total_users = users.count_documents({})
 
-    profit = total_earned - total_withdrawn
+        total_earned = 0
+        total_withdrawn = 0
 
-    text = (
-        f"📊 Stats\n\n"
-        f"👥 Users: {total_users}\n"
-        f"📈 Earned: ${round(total_earned,2)}\n"
-        f"💸 Withdrawn: ${round(total_withdrawn,2)}\n"
-        f"💰 Profit: ${round(profit,2)}"
-    )
+        for u in users.find({}, {"user_earned": 1, "user_withdrawn": 1}):
+            total_earned += u.get("user_earned", 0)
+            total_withdrawn += u.get("user_withdrawn", 0)
 
-    await query.edit_message_text(text, reply_markup=back_menu())
+        profit = total_earned - total_withdrawn
+
+        text = (
+            f"📊 Admin Stats\n\n"
+            f"👥 Total Users: {total_users}\n"
+            f"📈 Total Earned: ${round(total_earned, 2)}\n"
+            f"💸 Total Withdrawn: ${round(total_withdrawn, 2)}\n"
+            f"💰 Net Profit: ${round(profit, 2)}"
+        )
+
+        await query.edit_message_text(text, reply_markup=back_menu())
     
 # ========= MESSAGE HANDLER =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -453,23 +460,65 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-   # =========================
-# 🧩 TASK COMPLETION (PRO)
-# =========================
-if text.startswith("/done_"):
-    try:
-        task_id = text.split("_")[1]
-
-        # Validate ObjectId
+    # =========================
+    # 🧩 TASK COMPLETION (PRO)
+    # =========================
+    if text.startswith("/done_"):
         try:
-            task = tasks.find_one({"_id": ObjectId(task_id)})
-        except:
-            await update.message.reply_text("❌ Invalid task ID")
-            return
+            task_id = text.split("_")[1]
 
-        if not task:
-            await update.message.reply_text("❌ Task not found")
-            return
+            # Validate ObjectId
+            try:
+                task = tasks.find_one({"_id": ObjectId(task_id)})
+            except:
+                await update.message.reply_text("❌ Invalid task ID")
+                return
+
+            if not task:
+                await update.message.reply_text("❌ Task not found")
+                return
+
+            # Ensure completed_tasks field exists
+            if "completed_tasks" not in user:
+                users.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"completed_tasks": []}}
+                )
+                user["completed_tasks"] = []
+
+            # 🚫 Prevent duplicate earning
+            if task_id in user.get("completed_tasks", []):
+                await update.message.reply_text("⚠️ You already completed this task")
+                return
+
+            reward = float(task.get("reward", 0))
+
+            # 🚫 Safety check
+            if reward <= 0:
+                await update.message.reply_text("❌ Invalid task reward")
+                return
+
+            # 💰 Give reward + save completion
+            users.update_one(
+                {"user_id": user_id},
+                {
+                    "$inc": {
+                        "balance": reward,
+                        "user_earned": reward
+                    },
+                    "$push": {"completed_tasks": task_id}
+                }
+            )
+
+            await update.message.reply_text(
+                f"✅ Task completed successfully!\n\n💰 Earned: ${reward}"
+            )
+
+        except Exception as e:
+            print("Task Error:", e)
+            await update.message.reply_text("❌ Something went wrong")
+
+        return
 
         # Ensure completed_tasks field exists
         if "completed_tasks" not in user:
