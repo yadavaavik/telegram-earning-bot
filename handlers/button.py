@@ -1,7 +1,16 @@
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from database.mongo import users
+from modules.daily import claim_daily
 from utils.helpers import safe_handler
+
+def menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
+        [InlineKeyboardButton("👥 Refer", callback_data="refer")],
+        [InlineKeyboardButton("🎁 Daily Bonus", callback_data="daily")],
+        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")]
+    ])
 
 @safe_handler
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -15,13 +24,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "balance":
         await query.edit_message_text(
-            f"💰 Balance: {user['balance']}\nEarned: {user['earned']}"
+            f"💰 Balance: {user['balance']}\nEarned: {user['earned']}\nWithdrawn: {user['withdrawn']}",
+            reply_markup=menu()
         )
 
     elif data == "refer":
         link = f"https://t.me/{context.bot.username}?start={user_id}"
-        await query.edit_message_text(f"👥 Your link:\n{link}")
+        await query.edit_message_text(
+            f"👥 Invite & earn\n{link}",
+            reply_markup=menu()
+        )
+
+    elif data == "daily":
+        ok = await claim_daily(user_id)
+        if ok:
+            text = "🎁 Bonus claimed!"
+        else:
+            text = "⏳ Come back tomorrow"
+
+        await query.edit_message_text(text, reply_markup=menu())
 
     elif data == "withdraw":
-        await query.edit_message_text("Send wallet address")
+        await query.edit_message_text("💸 Send wallet address")
         context.user_data["await_wallet"] = True
