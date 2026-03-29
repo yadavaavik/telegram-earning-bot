@@ -3,6 +3,7 @@ from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, f
 from handlers.start import start_cmd
 from handlers.button import button_handler
 from handlers.message import msg_handler
+from handlers.tasks import show_tasks, task_click
 
 def register_handlers(app):
     app.add_handler(CommandHandler("start", start_cmd))
