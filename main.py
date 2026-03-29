@@ -479,22 +479,36 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # =========================
     # 🧩 TASK COMPLETION (PRO)
     # =========================
+    # =========================
+    # 🧩 TASK COMPLETION (ULTIMATE PRO)
+    # =========================
     if text.startswith("/done_"):
         try:
-            task_id = text.split("_")[1]
+            parts = text.split("_")
 
-            # Validate ObjectId
+            # 🚫 Invalid format protection
+            if len(parts) < 2:
+                await update.message.reply_text("❌ Invalid format. Use /done_taskid")
+                return
+
+            task_id = parts[1]
+
+            # 🔍 Validate ObjectId
             try:
-                task = tasks.find_one({"_id": ObjectId(task_id)})
+                obj_id = ObjectId(task_id)
             except:
                 await update.message.reply_text("❌ Invalid task ID")
                 return
+
+            task = tasks.find_one({"_id": obj_id})
 
             if not task:
                 await update.message.reply_text("❌ Task not found")
                 return
 
-            # Ensure completed_tasks field exists
+            # =========================
+            # 🛡️ USER DATA SAFETY
+            # =========================
             if "completed_tasks" not in user:
                 users.update_one(
                     {"user_id": user_id},
@@ -502,19 +516,30 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 user["completed_tasks"] = []
 
-            # 🚫 Prevent duplicate earning
-            if task_id in user.get("completed_tasks", []):
+            completed_tasks = user.get("completed_tasks", [])
+
+            # 🚫 Duplicate protection
+            if task_id in completed_tasks:
                 await update.message.reply_text("⚠️ You already completed this task")
                 return
 
-            reward = float(task.get("reward", 0))
+            # =========================
+            # 💰 REWARD VALIDATION
+            # =========================
+            reward = task.get("reward", 0)
 
-            # 🚫 Safety check
+            try:
+                reward = float(reward)
+            except:
+                reward = 0
+
             if reward <= 0:
-                await update.message.reply_text("❌ Invalid task reward")
+                await update.message.reply_text("❌ Invalid reward for this task")
                 return
 
-            # 💰 Give reward + save completion
+            # =========================
+            # 💰 CREDIT REWARD
+            # =========================
             users.update_one(
                 {"user_id": user_id},
                 {
@@ -526,55 +551,20 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
             )
 
+            # =========================
+            # 🎉 SUCCESS RESPONSE
+            # =========================
             await update.message.reply_text(
-                f"✅ Task completed successfully!\n\n💰 Earned: ${reward}"
+                f"✅ Task completed!\n\n"
+                f"💰 Earned: ${round(reward, 2)}\n"
+                f"📈 Keep going 🚀"
             )
 
         except Exception as e:
-            print("Task Error:", e)
-            await update.message.reply_text("❌ Something went wrong")
+            print("Task Completion Error:", e)
+            await update.message.reply_text("❌ Something went wrong. Try again.")
 
         return
-
-        # Ensure completed_tasks field exists
-        if "completed_tasks" not in user:
-            users.update_one(
-                {"user_id": user_id},
-                {"$set": {"completed_tasks": []}}
-            )
-            user["completed_tasks"] = []
-
-        # 🚫 Prevent duplicate earning
-        if task_id in user.get("completed_tasks", []):
-            await update.message.reply_text("⚠️ You already completed this task")
-            return
-
-        reward = float(task.get("reward", 0))
-
-        # 🚫 Safety check (invalid reward)
-        if reward <= 0:
-            await update.message.reply_text("❌ Invalid task reward")
-            return
-
-        # 💰 Give reward + mark completed
-        users.update_one(
-            {"user_id": user_id},
-            {
-                "$inc": {
-                    "balance": reward,
-                    "user_earned": reward
-                },
-                "$push": {"completed_tasks": task_id}
-            }
-        )
-
-        await update.message.reply_text(
-            f"✅ Task completed successfully!\n\n💰 Earned: ${reward}"
-        )
-
-        await update.message.reply_text("❌ Something went wrong")
-
-    return
 
 # ========= MAIN =========
 def main():
