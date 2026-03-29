@@ -193,7 +193,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "user_id": user_id,
                 "wallet": text,
                 "amount": user["balance"],
-                "status": "pending"
+                "status": "completed"
             })
 
             users.update_one(
