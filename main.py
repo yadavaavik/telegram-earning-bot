@@ -25,43 +25,61 @@ def menu():
 
 # ========= START =========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
+    try:
+        user = update.effective_user
 
-    users.update_one(
-        {"user_id": user.id},
-        {"$setOnInsert": {
-            "user_id": user.id,
-            "name": user.first_name,
-            "balance": 0,
-            "referrals": 0
-        }},
-        upsert=True
-    )
+        # SAFETY CHECK
+        if update.message is None:
+            return
 
-    await update.message.reply_text(
-        f"🎉 Welcome {user.first_name}!\nEarn ₹10 per referral 💸",
-        reply_markup=menu()
-    )
+        users.update_one(
+            {"user_id": user.id},
+            {"$setOnInsert": {
+                "user_id": user.id,
+                "name": user.first_name,
+                "balance": 0,
+                "referrals": 0
+            }},
+            upsert=True
+        )
+
+        await update.message.reply_text(
+            f"🎉 Welcome {user.first_name}!\nEarn ₹10 per referral 💸",
+            reply_markup=menu()
+        )
+
+    except Exception as e:
+        print("START ERROR:", e)
 
 # ========= BUTTON =========
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    try:
+        query = update.callback_query
+        if not query:
+            return
 
-    user = users.find_one({"user_id": query.from_user.id})
+        await query.answer()
 
-    if query.data == "balance":
-        msg = f"💰 Balance: ₹{user['balance']}\n👥 Referrals: {user['referrals']}"
+        user = users.find_one({"user_id": query.from_user.id})
 
-    elif query.data == "refer":
-        bot_username = (await context.bot.get_me()).username
-        msg = f"https://t.me/{bot_username}?start={query.from_user.id}"
+        if not user:
+            return
 
-    else:
-        msg = "Withdraw coming soon"
+        if query.data == "balance":
+            msg = f"💰 Balance: ₹{user['balance']}\n👥 Referrals: {user['referrals']}"
 
-    await query.edit_message_text(msg, reply_markup=menu())
+        elif query.data == "refer":
+            bot_username = (await context.bot.get_me()).username
+            msg = f"https://t.me/{bot_username}?start={query.from_user.id}"
 
+        else:
+            msg = "Withdraw coming soon"
+
+        await query.edit_message_text(msg, reply_markup=menu())
+
+    except Exception as e:
+        print("BUTTON ERROR:", e)
+        
 # ========= MAIN =========
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
