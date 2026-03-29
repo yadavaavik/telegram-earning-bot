@@ -41,8 +41,13 @@ telegram_app.add_handler(CommandHandler("start", start))
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    telegram_app.update_queue.put_nowait(update)
+    json_data = request.get_json(force=True)
+
+    update = Update.de_json(json_data, telegram_app.bot)
+
+    import asyncio
+    asyncio.run(telegram_app.process_update(update))
+
     return "ok"
 
 @app.route("/")
