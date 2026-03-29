@@ -1,6 +1,7 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from modules.user import create_user
+from modules.referral import process_referral
 from utils.helpers import safe_handler
 
 @safe_handler
@@ -14,11 +15,15 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    await create_user(user_id, ref)
+    user = await create_user(user_id, ref)
+
+    if user.get("new", True):
+        await process_referral(user_id, ref)
 
     kb = [
         [InlineKeyboardButton("💰 Balance", callback_data="balance")],
         [InlineKeyboardButton("👥 Refer", callback_data="refer")],
+        [InlineKeyboardButton("🎁 Daily Bonus", callback_data="daily")],
         [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")]
     ]
 
