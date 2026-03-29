@@ -6,7 +6,6 @@ from telegram.ext import (
     ContextTypes, MessageHandler, filters
 )
 from pymongo import MongoClient
-from bson import ObjectId
 
 # ========= CONFIG =========
 logging.basicConfig(level=logging.INFO)
@@ -14,10 +13,7 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 
-print("TOKEN:", BOT_TOKEN)
-print("MONGO:", MONGO_URI)
-
-ADMIN_IDS = [8250329715]  
+ADMIN_IDS = [8250329715]
 
 # ========= DB =========
 client = MongoClient(MONGO_URI)
@@ -82,17 +78,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "referred_by": None
             })
 
-            # referral
             if ref_id and ref_id != uid:
                 ref_user = users.find_one({"user_id": ref_id})
                 if ref_user:
                     users.update_one(
-    {"user_id": ref_id},
-    {"$inc": {
-    "balance": REFERRAL_REWARD,
-    "referrals": 1,
-    "user_earned": REFERRAL_REWARD
-    }}
+                        {"user_id": ref_id},
+                        {"$inc": {
+                            "balance": REFERRAL_REWARD,
+                            "referrals": 1,
+                            "user_earned": REFERRAL_REWARD
+                        }}
                     )
                     users.update_one(
                         {"user_id": uid},
@@ -119,14 +114,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not user:
             return
 
-        # ===== BALANCE =====
         if query.data == "back":
-    await query.edit_message_text(
-        "🏠 Main Menu",
-        reply_markup=main_menu(user_id)
-    )
+            await query.edit_message_text(
+                "🏠 Main Menu",
+                reply_markup=main_menu(user_id)
+            )
 
-elif query.data == "balance":
+        elif query.data == "balance":
             msg = (
                 f"💰 Balance: ${round(user['balance'], 2)}\n"
                 f"👥 Referrals: {user['referrals']}\n"
@@ -135,16 +129,15 @@ elif query.data == "balance":
             )
             await query.edit_message_text(msg, reply_markup=back_menu())
 
-        # ===== REFER =====
         elif query.data == "refer":
             bot = await context.bot.get_me()
             link = f"https://t.me/{bot.username}?start={user_id}"
+
             await query.edit_message_text(
                 f"🔗 Your Referral Link:\n{link}",
                 reply_markup=back_menu()
             )
 
-        # ===== WITHDRAW =====
         elif query.data == "withdraw":
             if user["balance"] < MIN_WITHDRAW:
                 await query.edit_message_text(
@@ -154,10 +147,9 @@ elif query.data == "balance":
             else:
                 context.user_data["awaiting_wallet"] = True
                 await query.message.reply_text(
-                    "💳 Send your crypto wallet address (USDT / BTC / etc)"
+                    "💳 Send your crypto wallet address"
                 )
 
-        # ===== ADMIN PANEL =====
         elif query.data == "admin_panel":
             if user_id not in ADMIN_IDS:
                 await query.answer("Not allowed ❌", show_alert=True)
@@ -168,39 +160,26 @@ elif query.data == "balance":
                 reply_markup=admin_menu()
             )
 
-        # ===== ADMIN STATS =====
         elif query.data == "admin_stats":
             if user_id not in ADMIN_IDS:
                 return
 
             total_users = users.count_documents({})
-
-            total_withdraw = sum(
-                u.get("user_withdrawn", 0) for u in users.find()
-            )
-
-            total_earned = sum(
-                u.get("user_earned", 0) for u in users.find()
-            )
+            total_withdraw = sum(u.get("user_withdrawn", 0) for u in users.find())
+            total_earned = sum(u.get("user_earned", 0) for u in users.find())
 
             profit = total_earned - total_withdraw
 
             text = (
                 "📊 Bot Stats\n\n"
                 f"👥 Users: {total_users}\n"
-                f"📈 Total Earned: ${round(total_earned, 2)}\n"
-                f"💸 Total Withdrawn: ${round(total_withdraw, 2)}\n"
+                f"📈 Earned: ${round(total_earned, 2)}\n"
+                f"💸 Withdrawn: ${round(total_withdraw, 2)}\n"
                 f"💰 Profit: ${round(profit, 2)}"
             )
 
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 Back", callback_data="back")]
-                ])
-            )
+            await query.edit_message_text(text, reply_markup=back_menu())
 
-        # ===== BROADCAST =====
         elif query.data == "broadcast":
             if user_id not in ADMIN_IDS:
                 return
@@ -208,7 +187,8 @@ elif query.data == "balance":
             context.user_data["broadcast"] = True
             await query.message.reply_text("Send message to broadcast")
 
-    
+    except Exception as e:
+        print("BUTTON ERROR:", e)
 
 # ========= MESSAGE =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -233,54 +213,35 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # ===== WITHDRAW =====
         if context.user_data.get("awaiting_wallet"):
-    user = users.find_one({"user_id": user_id})
-    amount = user["balance"]
+            user = users.find_one({"user_id": user_id})
+            amount = user["balance"]
 
-    withdraws.insert_one({
-        "user_id": user_id,
-        "wallet": text,
-        "amount": amount,
-        "status": "completed"
-    })
+            withdraws.insert_one({
+                "user_id": user_id,
+                "wallet": text,
+                "amount": amount,
+                "status": "completed"
+            })
 
-    users.update_one(
-        {"user_id": user_id},
-        {
-            "$set": {"balance": 0},
-            "$inc": {"user_withdrawn": amount}
-        }
-    )
+            users.update_one(
+                {"user_id": user_id},
+                {
+                    "$set": {"balance": 0},
+                    "$inc": {"user_withdrawn": amount}
+                }
+            )
 
-    context.user_data["awaiting_wallet"] = False
+            context.user_data["awaiting_wallet"] = False
 
-    await update.message.reply_text(
-        f"✅ Withdraw processed instantly 💸\n\n💰 Amount: ${round(amount, 2)}",
-        reply_markup=main_menu(user_id)
-    )
+            await update.message.reply_text(
+                f"✅ Withdraw processed instantly 💸\n\n💰 Amount: ${round(amount, 2)}",
+                reply_markup=main_menu(user_id)
+            )
+            return
 
-    # Save withdraw
-    withdraws.insert_one({
-        "user_id": user_id,
-        "wallet": text,
-        "amount": amount,
-        "status": "completed"
-    })
+    except Exception as e:
+        print("MESSAGE ERROR:", e)
 
-    # Update user balance + withdrawn
-    users.update_one(
-        {"user_id": user_id},
-        {
-            "$set": {"balance": 0},
-            "$inc": {"user_withdrawn": amount}
-        }
-    )
-
-    context.user_data["awaiting_wallet"] = False
-
-    await update.message.reply_text(
-        f"✅ Withdraw processed instantly 💸\n\n💰 Amount: ${round(amount, 2)}",
-        reply_markup=main_menu(user_id)
-    )
 # ========= MAIN =========
 def main():
     try:
