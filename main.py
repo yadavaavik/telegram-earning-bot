@@ -114,11 +114,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ========= BUTTON HANDLER =========
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = query.from_user.id
     data = query.data
 
     # =========================
@@ -556,9 +555,9 @@ def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
 
     print("🚀 Running...")
     app.run_polling()
