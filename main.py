@@ -31,11 +31,12 @@ def main_menu():
 # ========= START =========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    username = update.effective_user.username or "User"
+    username = update.effective_user.first_name or "User"
 
     args = context.args
     user = users.find_one({"user_id": user_id})
 
+    # 🆕 NEW USER
     if not user:
         users.insert_one({
             "user_id": user_id,
@@ -44,7 +45,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "referrals": 0
         })
 
-        # REFERRAL
+        # 🔥 REFERRAL SYSTEM
         if args:
             try:
                 ref_id = int(args[0])
@@ -58,13 +59,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
 
-        await update.message.reply_text(
-            f"🎉 Welcome {username}!\n\nEarn money using this bot 👇",
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=(
+                f"🎉 *Welcome {username}!* \n\n"
+                f"💰 Earn money by inviting friends\n"
+                f"👥 Get ₹10 per referral\n\n"
+                f"👇 Use the buttons below to get started"
+            ),
+            parse_mode="Markdown",
             reply_markup=main_menu()
         )
+
+    # 👤 EXISTING USER
     else:
-        await update.message.reply_text(
-            f"👋 Welcome back {username}!",
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=(
+                f"👋 *Welcome back {username}!* \n\n"
+                f"💡 Ready to earn more? 🚀"
+            ),
+            parse_mode="Markdown",
             reply_markup=main_menu()
         )
 
@@ -78,14 +93,26 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "balance":
         await query.edit_message_text(
-            f"💰 Balance: {user.get('balance',0)}\n👥 Referrals: {user.get('referrals',0)}",
+            text=(
+                f"💰 *Your Balance*\n\n"
+                f"💵 Amount: ₹{user.get('balance',0)}\n"
+                f"👥 Referrals: {user.get('referrals',0)}"
+            ),
+            parse_mode="Markdown",
             reply_markup=main_menu()
         )
 
     elif query.data == "refer":
         link = f"https://t.me/{context.bot.username}?start={user_id}"
+
         await query.edit_message_text(
-            f"👥 Invite & Earn ₹10\n\n🔗 Your link:\n{link}",
+            text=(
+                f"👥 *Refer & Earn*\n\n"
+                f"💸 Earn ₹10 per friend\n\n"
+                f"🔗 Your referral link:\n{link}\n\n"
+                f"📢 Share this link and start earning!"
+            ),
+            parse_mode="Markdown",
             reply_markup=main_menu()
         )
 
@@ -94,7 +121,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if balance < 50:
             await query.edit_message_text(
-                "❌ Minimum withdraw is ₹50",
+                text=(
+                    f"❌ *Withdrawal Failed*\n\n"
+                    f"Minimum withdrawal is ₹50\n"
+                    f"Your balance: ₹{balance}"
+                ),
+                parse_mode="Markdown",
                 reply_markup=main_menu()
             )
         else:
@@ -110,7 +142,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             await query.edit_message_text(
-                "✅ Withdraw request sent!",
+                text=(
+                    f"✅ *Withdrawal Requested*\n\n"
+                    f"💸 Amount: ₹{balance}\n"
+                    f"⏳ Status: Pending\n\n"
+                    f"Admin will review shortly"
+                ),
+                parse_mode="Markdown",
                 reply_markup=main_menu()
             )
 
