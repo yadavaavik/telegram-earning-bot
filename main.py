@@ -66,8 +66,10 @@ def back_menu():
 def admin_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📊 Stats", callback_data="stats")],
+        [InlineKeyboardButton("🏆 Top Users", callback_data="top_users")],
+        [InlineKeyboardButton("🚫 Ban User", callback_data="ban_user")],
         [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
-        [InlineKeyboardButton("➕ Add Task", callback_data="add_task")],  # 🔥 PRO
+        [InlineKeyboardButton("➕ Add Task", callback_data="add_task")],
         [InlineKeyboardButton("🔙 Back", callback_data="back")]
     ])
 
@@ -141,6 +143,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     # =========================
+    # TOP USER
+    # =========================
+    elif data == "top_users":
+    if user_id not in ADMIN_IDS:
+        return
+
+    top = users.find().sort("user_earned", -1).limit(20)
+
+    text = "🏆 Top 20 Earners\n\n"
+
+    rank = 1
+    for u in top:
+        text += (
+            f"{rank}. {u.get('name','User')} - "
+            f"${round(u.get('user_earned',0),2)}\n"
+        )
+        rank += 1
+
+    await query.edit_message_text(text, reply_markup=back_menu())
+    
+    # =========================
     # 💰 BALANCE
     # =========================
     elif data == "balance":
@@ -151,6 +174,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💸 Withdrawn: ${round(user.get('user_withdrawn', 0), 2)}"
         )
         await query.edit_message_text(msg, reply_markup=back_menu())
+
+   # =========================
+   # BAN USER
+   # =========================
+   elif data == "ban_user":
+        if user_id not in ADMIN_IDS:
+           return
+  
+    context.user_data["ban_mode"] = True
+    await query.message.reply_text("🚫 Send USER ID to ban")
 
     # =========================
     # 👥 REFER
@@ -169,7 +202,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🧩 TASK LIST
     # =========================
     elif data == "tasks":
-        all_tasks = list(tasks.find())
+        all_tasks = list(tasks.find({}, {"title": 1, "reward": 1}))
 
         if not all_tasks:
             await query.edit_message_text(
@@ -248,6 +281,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "👑 Admin Panel",
             reply_markup=admin_menu()
         )
+
+    elif data.startswith("ban_"):
+    if user_id not in ADMIN_IDS:
+        return
+
+    target_id = int(data.split("_")[1])
+
+    users.update_one(
+        {"user_id": target_id},
+        {"$set": {"is_banned": True}}
+    )
+
+    await query.edit_message_text("🚫 User banned")
 
     # =========================
     # ➕ ADD TASK
@@ -397,13 +443,33 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "reward": float(reward.strip())
             })
 
-            await update.message.reply_text("✅ Task Added Successfully")
+                 await update.message.reply_text("✅ Task Added Successfully")
 
-        except Exception as e:
-            await update.message.reply_text("❌ Format:\nTitle | Link | Reward")
-
-        context.user_data["add_task"] = False
+             except Exception as e:
+                 await update.message.reply_text("❌ Format:\nTitle | Link | Reward")
+   
+            context.user_data["add_task"] = False
         return
+
+    # =========================
+    # 🚫 BAN USER SYSTEM
+    # =========================
+    if context.user_data.get("ban_mode"):
+        try:
+            target_id = int(text)
+
+            users.update_one(
+                 {"user_id": target_id},
+                 {"$set": {"is_banned": True}}
+            )
+
+        await update.message.reply_text(f"✅ User {target_id} banned")
+
+    except:
+        await update.message.reply_text("❌ Invalid user ID")
+
+    context.user_data["ban_mode"] = False
+    return
 
     # =========================
     # 📢 BROADCAST SYSTEM
@@ -513,7 +579,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 user["completed_tasks"] = []
 
-            completed_tasks = user.get("completed_tasks", [])
+            user = users.find_one({"user_id": user_id})
+completed_tasks = user.get("completed_tasks", [])
 
             # 🚫 Duplicate protection
             if task_id in completed_tasks:
