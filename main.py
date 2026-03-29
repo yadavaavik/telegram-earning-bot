@@ -51,7 +51,7 @@ def back_menu():
 
 def admin_menu():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📤 Withdraws", callback_data="admin_withdraws")],
+        [InlineKeyboardButton("📊 Stats", callback_data="admin_stats")],
         [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
         [InlineKeyboardButton("🔙 Back", callback_data="back")]
     ])
@@ -77,6 +77,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "name": user.first_name,
                 "balance": 0.0,
                 "referrals": 0,
+                "user_earned": 0.0,
+                "user_withdrawn": 0.0,
                 "referred_by": None
             })
 
@@ -86,8 +88,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if ref_user:
                     users.update_one(
     {"user_id": ref_id},
-    {"$inc": {"balance": REFERRAL_REWARD, "referrals": 1}}}
-)
+    {"$inc": {
+    "balance": REFERRAL_REWARD,
+    "referrals": 1,
+    "user_earned": REFERRAL_REWARD
+    }}
+                    )
                     users.update_one(
                         {"user_id": uid},
                         {"$set": {"referred_by": ref_id}}
@@ -112,6 +118,99 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not user:
             return
+
+        # ===== BACK =====
+        if query.data == "back":
+            await query.edit_message_text(
+                "🏠 Main Menu",
+                reply_markup=main_menu(user_id)
+            )
+
+        # ===== BALANCE =====
+        elif query.data == "balance":
+            msg = (
+                f"💰 Balance: ${round(user['balance'], 2)}\n"
+                f"👥 Referrals: {user['referrals']}\n"
+                f"📈 Earned: ${round(user.get('user_earned', 0), 2)}\n"
+                f"💸 Withdrawn: ${round(user.get('user_withdrawn', 0), 2)}"
+            )
+            await query.edit_message_text(msg, reply_markup=back_menu())
+
+        # ===== REFER =====
+        elif query.data == "refer":
+            bot = await context.bot.get_me()
+            link = f"https://t.me/{bot.username}?start={user_id}"
+            await query.edit_message_text(
+                f"🔗 Your Referral Link:\n{link}",
+                reply_markup=back_menu()
+            )
+
+        # ===== WITHDRAW =====
+        elif query.data == "withdraw":
+            if user["balance"] < MIN_WITHDRAW:
+                await query.edit_message_text(
+                    f"❌ Minimum ${MIN_WITHDRAW}",
+                    reply_markup=back_menu()
+                )
+            else:
+                context.user_data["awaiting_wallet"] = True
+                await query.message.reply_text(
+                    "💳 Send your crypto wallet address (USDT / BTC / etc)"
+                )
+
+        # ===== ADMIN PANEL =====
+        elif query.data == "admin_panel":
+            if user_id not in ADMIN_IDS:
+                await query.answer("Not allowed ❌", show_alert=True)
+                return
+
+            await query.edit_message_text(
+                "👑 Admin Panel",
+                reply_markup=admin_menu()
+            )
+
+        # ===== ADMIN STATS =====
+        elif query.data == "admin_stats":
+            if user_id not in ADMIN_IDS:
+                return
+
+            total_users = users.count_documents({})
+
+            total_withdraw = sum(
+                u.get("user_withdrawn", 0) for u in users.find()
+            )
+
+            total_earned = sum(
+                u.get("user_earned", 0) for u in users.find()
+            )
+
+            profit = total_earned - total_withdraw
+
+            text = (
+                "📊 Bot Stats\n\n"
+                f"👥 Users: {total_users}\n"
+                f"📈 Total Earned: ${round(total_earned, 2)}\n"
+                f"💸 Total Withdrawn: ${round(total_withdraw, 2)}\n"
+                f"💰 Profit: ${round(profit, 2)}"
+            )
+
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Back", callback_data="back")]
+                ])
+            )
+
+        # ===== BROADCAST =====
+        elif query.data == "broadcast":
+            if user_id not in ADMIN_IDS:
+                return
+
+            context.user_data["broadcast"] = True
+            await query.message.reply_text("Send message to broadcast")
+
+    except Exception as e:
+        print("BUTTON ERROR:", e)
 
         # ===== BACK =====
         if query.data == "back":
@@ -187,30 +286,32 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # ===== WITHDRAW =====
         if context.user_data.get("awaiting_wallet"):
-            user = users.find_one({"user_id": user_id})
+    user = users.find_one({"user_id": user_id})
+    amount = user["balance"]
 
-            withdraws.insert_one({
-                "user_id": user_id,
-                "wallet": text,
-                "amount": user["balance"],
-                "status": "completed"
-            })
+    # Save withdraw
+    withdraws.insert_one({
+        "user_id": user_id,
+        "wallet": text,
+        "amount": amount,
+        "status": "completed"
+    })
 
-            users.update_one(
-                {"user_id": user_id},
-                {"$set": {"balance": 0}}
-            )
+    # Update user balance + withdrawn
+    users.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {"balance": 0},
+            "$inc": {"user_withdrawn": amount}
+        }
+    )
 
-            context.user_data["awaiting_wallet"] = False
+    context.user_data["awaiting_wallet"] = False
 
-            await update.message.reply_text(
-                "✅ Withdraw processed instantly 💸",
-                reply_markup=main_menu(user_id)
-            )
-
-    except Exception as e:
-        print("MSG ERROR:", e)
-
+    await update.message.reply_text(
+        f"✅ Withdraw processed instantly 💸\n\n💰 Amount: ${round(amount, 2)}",
+        reply_markup=main_menu(user_id)
+    )
 # ========= MAIN =========
 def main():
     try:
