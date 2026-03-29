@@ -329,6 +329,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await query.edit_message_text("❌ Rejected")
+
+   # ===== STATS =====
+elif data == "stats":
+    if user_id not in ADMIN_IDS:
+        return
+
+    total_users = users.count_documents({})
+    total_earned = sum(u.get("user_earned", 0) for u in users.find())
+    total_withdrawn = sum(u.get("user_withdrawn", 0) for u in users.find())
+
+    profit = total_earned - total_withdrawn
+
+    text = (
+        f"📊 Stats\n\n"
+        f"👥 Users: {total_users}\n"
+        f"📈 Earned: ${round(total_earned,2)}\n"
+        f"💸 Withdrawn: ${round(total_withdrawn,2)}\n"
+        f"💰 Profit: ${round(profit,2)}"
+    )
+
+    await query.edit_message_text(text, reply_markup=back_menu())
     
 # ========= MESSAGE HANDLER =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -440,6 +461,30 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             task_id = text.split("_")[1]
 
             task = tasks.find_one({"_id": ObjectId(task_id)})
+
+if not task:
+    await update.message.reply_text("❌ Task not found")
+    return
+
+# prevent duplicate
+if "completed_tasks" not in user:
+    users.update_one({"user_id": user_id}, {"$set": {"completed_tasks": []}})
+    user["completed_tasks"] = []
+
+if task_id in user.get("completed_tasks", []):
+    await update.message.reply_text("❌ Already completed this task")
+    return
+
+    users.update_one(
+    {"user_id": user_id},
+    {
+        "$inc": {
+            "balance": reward,
+            "user_earned": reward
+        },
+        "$push": {"completed_tasks": task_id}
+    }
+    )
 
             if not task:
                 await update.message.reply_text("❌ Task not found")
