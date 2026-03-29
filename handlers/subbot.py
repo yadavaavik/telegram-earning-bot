@@ -1,3 +1,4 @@
+from utils.helpers import safe_handler
 @safe_handler
 async def token_handler(update, context):
     if not context.user_data.get("await_bot_token"):
