@@ -25,6 +25,10 @@ db = client["telegram_bot"]
 users = db["users"]
 withdraws = db["withdraws"]
 
+# ========= SETTINGS =========
+REFERRAL_REWARD = 0.10
+MIN_WITHDRAW = 1.0
+
 # ========= MENUS =========
 def main_menu(user_id):
     keyboard = [
@@ -81,9 +85,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ref_user = users.find_one({"user_id": ref_id})
                 if ref_user:
                     users.update_one(
-                        {"user_id": ref_id},
-                        "$inc": {"balance": REFERRAL_REWARD, "referrals": 1}}
-                    )
+    {"user_id": ref_id},
+    {"$inc": {"balance": 0.10, "referrals": 1}}
+)
                     users.update_one(
                         {"user_id": uid},
                         {"$set": {"referred_by": ref_id}}
@@ -118,7 +122,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # ===== BALANCE =====
         elif query.data == "balance":
-            msg = f"💰 ₹{user['balance']}\n👥 {user['referrals']} referrals"
+            msg = f"💰 ${round(user['balance'], 2)}\n👥 {user['referrals']} referrals"
             await query.edit_message_text(msg, reply_markup=back_menu())
 
         # ===== REFER =====
@@ -129,9 +133,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # ===== WITHDRAW =====
         elif query.data == "withdraw":
-            if user["balance"] < 100:
+            if user["balance"] < MIN_WITHDRAW:
                 await query.edit_message_text(
-                    "❌ Minimum ₹100",
+                    f"❌ Minimum ${MIN_WITHDRAW}",
                     reply_markup=back_menu()
                 )
             else:
@@ -150,11 +154,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         # ===== ADMIN WITHDRAWS =====
-        elif query.data == "admin_withdraws":
             if user_id not in ADMIN_IDS:
                 return
 
-            data = withdraws.find({"status": "pending"})
+            data = withdraws.find({"status": "completed"})
 
             text = "📤 Withdraw Requests:\n\n"
             buttons = []
@@ -176,7 +179,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         # ===== APPROVE =====
-        elif query.data.startswith("ok_"):
             wid = query.data.split("_")[1]
 
             withdraws.update_one(
@@ -187,7 +189,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("✅ Approved")
 
         # ===== REJECT =====
-        elif query.data.startswith("no_"):
             wid = query.data.split("_")[1]
 
             w = withdraws.find_one({"_id": ObjectId(wid)})
@@ -255,7 +256,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["awaiting_wallet"] = False
 
             await update.message.reply_text(
-                "✅ Withdraw submitted",
+                "✅ Withdraw processed instantly 💸",
                 reply_markup=main_menu(user_id)
             )
 
