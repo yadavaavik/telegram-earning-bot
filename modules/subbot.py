@@ -1,18 +1,13 @@
-from database.mongo import db
+from database.mongo import bots
 import time
 
-bots_col = db["bots"]
-
-async def add_bot(owner_id, token, username):
-    await bots_col.insert_one({
-        "owner_id": owner_id,
+async def add_bot(owner, token, username):
+    await bots.insert_one({
+        "owner": owner,
         "token": token,
         "username": username,
-        "created_at": int(time.time())
+        "time": int(time.time())
     })
 
-async def get_user_bots(owner_id):
-    bots = []
-    async for b in bots_col.find({"owner_id": owner_id}):
-        bots.append(b)
-    return bots
+async def get_bots(owner):
+    return [b async for b in bots.find({"owner": owner})]
