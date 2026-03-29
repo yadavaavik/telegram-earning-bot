@@ -1,31 +1,17 @@
-from telegram import Update
-from telegram.ext import ContextTypes
-from utils.force_join import check_force_join, get_join_buttons
+from utils.force_join import is_joined, join_buttons
 
-ADMIN_ID = 123456789  # replace with your telegram id
+ADMIN_ID = 123456789  # your id
 
 
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_cmd(update, context):
     user = update.effective_user
 
-    # Admin bypass
     if user.id != ADMIN_ID:
-        joined = await check_force_join(user.id, context)
-
-        if not joined:
+        if not await is_joined(user.id, context):
             await update.message.reply_text(
-                "🚫 Please join all required channels first!",
-                reply_markup=get_join_buttons()
+                "🚫 Join required channels first",
+                reply_markup=join_buttons()
             )
             return
 
-    # Main menu
-    await update.message.reply_text(
-        "🏠 *Main Menu*\n\n"
-        "💰 Balance\n"
-        "👥 Refer\n"
-        "🧩 Tasks\n"
-        "💸 Withdraw\n"
-        "👑 Admin",
-        parse_mode="Markdown"
-    )
+    # continue your existing menu logic BELOW (DO NOT REMOVE YOUR CODE)
