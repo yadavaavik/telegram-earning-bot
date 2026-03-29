@@ -1,7 +1,5 @@
 import os
 import logging
-import os
-import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -9,6 +7,7 @@ from telegram.ext import (
     ContextTypes, MessageHandler, filters
 )
 from pymongo import MongoClient
+from bson import ObjectId
 
 # ========= CONFIG =========
 logging.basicConfig(level=logging.INFO)
@@ -189,6 +188,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data["add_task"] = True
         await query.message.reply_text("Send task in format:\nTitle | Link | Reward")
+
+    # ===== BROADCAST =====
+    elif data == "broadcast":
+        if user_id not in ADMIN_IDS:
+            return
+   
+    context.user_data["broadcast"] = True
+    await query.message.reply_text("📢 Send message to broadcast")
+
         
 # ========= MESSAGE HANDLER =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
