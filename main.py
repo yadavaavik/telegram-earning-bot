@@ -10,12 +10,14 @@ from bson import ObjectId
 
 # ========= CONFIG =========
 logging.basicConfig(level=logging.INFO)
-print("TOKEN:", BOT_TOKEN)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 
-ADMIN_IDS = [8250329715]  # ✅ your admin ID
+print("TOKEN:", BOT_TOKEN)
+print("MONGO:", MONGO_URI)
+
+ADMIN_IDS = [8250329715]  
 
 # ========= DB =========
 client = MongoClient(MONGO_URI)
