@@ -6,10 +6,6 @@ from handlers.subbot import token_handler
 from modules.security import can_withdraw, set_withdraw_time
 
 MIN_WITHDRAW = 10
-# max withdraw protection
-if user["balance"] > 100:
-    await update.message.reply_text("❌ Max withdraw limit reached")
-    return
 
 @safe_handler
 async def msg_handler(update, context):
@@ -27,12 +23,17 @@ async def msg_handler(update, context):
             await update.message.reply_text("❌ Minimum withdraw not reached")
             return
 
+        # ❌ max limit check (FIXED POSITION)
+        if user["balance"] > 100:
+            await update.message.reply_text("❌ Max withdraw limit reached")
+            return
+
         # ❌ cooldown check
         if not await can_withdraw(uid):
             await update.message.reply_text("⏳ Wait before next withdraw")
             return
 
-        # ❌ wallet validation (TRC20)
+        # ❌ wallet validation
         if not text.startswith("T"):
             await update.message.reply_text("❌ Invalid TRC20 wallet")
             return
