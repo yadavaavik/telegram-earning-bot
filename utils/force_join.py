@@ -1,4 +1,4 @@
-CHANNELS = ["@yourchannel"]
+CHANNELS = ["@milkyxbubble"]
 
 async def check_join(update, context):
     user_id = update.effective_user.id
