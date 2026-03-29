@@ -48,3 +48,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "withdraw":
         await query.edit_message_text("💸 Send wallet address")
         context.user_data["await_wallet"] = True
+        
+    elif data == "tasks":
+        from handlers.tasks import show_tasks
+        await show_tasks(update, context)
+
+    elif data.startswith("task_"):
+        from handlers.tasks import task_click
+        await task_click(update, context)
