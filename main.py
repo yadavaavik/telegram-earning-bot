@@ -479,9 +479,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # =========================
     # 🧩 TASK COMPLETION (PRO)
     # =========================
-    # =========================
-    # 🧩 TASK COMPLETION (ULTIMATE PRO)
-    # =========================
     if text.startswith("/done_"):
         try:
             parts = text.split("_")
