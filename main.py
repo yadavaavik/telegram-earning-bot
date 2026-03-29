@@ -26,20 +26,52 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     username = update.effective_user.username or "User"
 
+    args = context.args  # referral code
+
     user = users.find_one({"user_id": user_id})
 
-    if user:
-        await update.message.reply_text(
-            f"👋 Welcome back {username}!\n\n💰 Balance: {user.get('balance', 0)}\n👥 Referrals: {user.get('referrals', 0)}"
-        )
-    else:
+    # NEW USER
+    if not user:
         users.insert_one({
             "user_id": user_id,
             "username": username,
             "balance": 0,
             "referrals": 0
         })
+
+        # 🔥 REFERRAL LOGIC
+        if args:
+            referrer_id = int(args[0])
+
+            if referrer_id != user_id:
+                ref_user = users.find_one({"user_id": referrer_id})
+
+                if ref_user:
+                    users.update_one(
+                        {"user_id": referrer_id},
+                        {
+                            "$inc": {
+                                "balance": 10,      # 💰 reward
+                                "referrals": 1
+                            }
+                        }
+                    )
+
         await update.message.reply_text("✅ You are registered!")
+
+    # EXISTING USER
+    else:
+        balance = user.get("balance", 0)
+        refs = user.get("referrals", 0)
+
+        referral_link = f"https://t.me/{context.bot.username}?start={user_id}"
+
+        await update.message.reply_text(
+            f"👋 Welcome back {username}!\n\n"
+            f"💰 Balance: {balance}\n"
+            f"👥 Referrals: {refs}\n\n"
+            f"🔗 Your referral link:\n{referral_link}"
+        )
 
 # Add handler
 telegram_app.add_handler(CommandHandler("start", start))
