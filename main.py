@@ -357,6 +357,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
+    if not text:
+    return
 
     user = users.find_one({"user_id": user_id})
     if not user:
@@ -517,8 +519,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if task_id in completed_tasks:
                 return await update.message.reply_text("⚠️ Already completed")
 
-            reward = float(task.get("reward", 0))
-
+            try:
+    reward = float(task.get("reward", 0))
+except:
+    reward = 0
             if reward <= 0:
                 return await update.message.reply_text("❌ Invalid reward")
 
