@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
-ADMIN_ID = 123456789  # 🔥 CHANGE THIS
+ADMIN_ID = 8250329715 
 
 # ========= DB =========
 client = MongoClient(MONGO_URI)
