@@ -12,44 +12,42 @@ async def msg_handler(update, context):
     uid = update.effective_user.id
     text = update.message.text
 
-    # sub-bot token handler
+    # handle sub-bot token
     await token_handler(update, context)
 
+    # withdraw flow
     if context.user_data.get("w"):
         user = await users.find_one({"user_id": uid})
 
-        # ❌ minimum check
+        # min withdraw
         if user["balance"] < MIN_WITHDRAW:
             await update.message.reply_text("❌ Minimum withdraw not reached")
             return
 
-        # ❌ max limit check (FIXED POSITION)
+        # max withdraw
         if user["balance"] > 100:
             await update.message.reply_text("❌ Max withdraw limit reached")
             return
 
-        # ❌ cooldown check
+        # cooldown
         if not await can_withdraw(uid):
             await update.message.reply_text("⏳ Wait before next withdraw")
             return
 
-        # ❌ wallet validation
+        # wallet check
         if not text.startswith("T"):
             await update.message.reply_text("❌ Invalid TRC20 wallet")
             return
 
         amount = user["balance"]
 
-        # 💰 send crypto
+        # send crypto
         tx = await send_crypto(text, amount)
 
-        # 💰 update balance
+        # update db
         await deduct_balance(uid, amount)
-
-        # ⏱ set cooldown
         await set_withdraw_time(uid)
 
-        # 💾 save withdraw
         await withdraws.insert_one({
             "user_id": uid,
             "amount": amount,
@@ -57,8 +55,6 @@ async def msg_handler(update, context):
             "tx": tx
         })
 
-        await update.message.reply_text(
-            f"✅ Withdraw Sent\n\nTX ID: {tx}"
-        )
+        await update.message.reply_text(f"✅ Withdraw Sent\nTX ID: {tx}")
 
         context.user_data["w"] = False
