@@ -92,3 +92,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+from telegram.ext import Application
+
+async def error_handler(update, context):
+    print(f"ERROR: {context.error}")
+
+app.add_error_handler(error_handler)
