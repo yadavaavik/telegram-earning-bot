@@ -86,7 +86,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if ref_user:
                     users.update_one(
     {"user_id": ref_id},
-    {"$inc": {"balance": 0.10, "referrals": 1}}
+    {"$inc": {"balance": REFERRAL_REWARD, "referrals": 1}}}
 )
                     users.update_one(
                         {"user_id": uid},
@@ -140,7 +140,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 context.user_data["awaiting_wallet"] = True
-                await query.message.reply_text("Send crypto wallet address")
+                await query.message.reply_text("💳 Send your crypto wallet address (USDT / BTC / etc)")
 
         # ===== ADMIN PANEL =====
         elif query.data == "admin_panel":
