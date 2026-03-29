@@ -26,27 +26,56 @@ def menu():
 # ========= START =========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        user = update.effective_user
-
-        # SAFETY CHECK
         if update.message is None:
             return
 
-        users.update_one(
-            {"user_id": user.id},
-            {"$setOnInsert": {
-                "user_id": user.id,
-                "name": user.first_name,
-                "balance": 0,
-                "referrals": 0
-            }},
-            upsert=True
-        )
+        user = update.effective_user
+        user_id = user.id
+        name = user.first_name
 
-        await update.message.reply_text(
-            f"🎉 Welcome {user.first_name}!\nEarn ₹10 per referral 💸",
-            reply_markup=menu()
-        )
+        referrer_id = None
+
+        if context.args:
+            try:
+                referrer_id = int(context.args[0])
+            except:
+                pass
+
+        existing = users.find_one({"user_id": user_id})
+
+        # ========= NEW USER =========
+        if not existing:
+            users.insert_one({
+                "user_id": user_id,
+                "name": name,
+                "balance": 0,
+                "referrals": 0,
+                "referred_by": None
+            })
+
+            # ✅ VALID REFERRAL
+            if referrer_id and referrer_id != user_id:
+                ref_user = users.find_one({"user_id": referrer_id})
+
+                if ref_user:
+                    # prevent duplicate referral
+                    if existing is None:
+                        users.update_one(
+                            {"user_id": referrer_id},
+                            {"$inc": {"balance": 10, "referrals": 1}}
+                        )
+
+                        users.update_one(
+                            {"user_id": user_id},
+                            {"$set": {"referred_by": referrer_id}}
+                        )
+
+            msg = f"🎉 Welcome {name}!\n\n💸 Earn ₹10 per referral"
+
+        else:
+            msg = f"👋 Welcome back {name}!"
+
+        await update.message.reply_text(msg, reply_markup=menu())
 
     except Exception as e:
         print("START ERROR:", e)
@@ -79,6 +108,65 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print("BUTTON ERROR:", e)
+
+# ====== WITHDRAWAL =======
+def menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
+        [InlineKeyboardButton("👥 Refer", callback_data="refer")],
+        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")]
+    ])
+
+async def withdraw_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if update.message is None:
+            return
+
+        user_id = update.effective_user.id
+        text = update.message.text
+
+        user = users.find_one({"user_id": user_id})
+
+        if context.user_data.get("awaiting_wallet"):
+            wallet = text
+
+            if user["balance"] < 100:
+                await update.message.reply_text("❌ Minimum withdraw ₹100")
+                context.user_data["awaiting_wallet"] = False
+                return
+
+            # Save withdraw request
+            db["withdraws"].insert_one({
+                "user_id": user_id,
+                "wallet": wallet,
+                "amount": user["balance"],
+                "status": "pending"
+            })
+
+            # reset balance
+            users.update_one(
+                {"user_id": user_id},
+                {"$set": {"balance": 0}}
+            )
+
+            context.user_data["awaiting_wallet"] = False
+
+            await update.message.reply_text(
+                "✅ Withdraw request submitted\n\n💸 You will receive crypto soon"
+            )
+
+    except Exception as e:
+        print("WITHDRAW ERROR:", e)
+
+elif query.data == "withdraw":
+    if user["balance"] < 100:
+        msg = "❌ Minimum withdraw ₹100"
+    else:
+        context.user_data["awaiting_wallet"] = True
+        await query.message.reply_text(
+            "💸 Send your crypto wallet address\n\n(BTC / USDT / etc.)"
+        )
+        return
         
 # ========= MAIN =========
 def main():
@@ -89,6 +177,10 @@ def main():
 
     print("✅ Bot running (polling)...")
     app.run_polling()
+
+from telegram.ext import MessageHandler, filters
+
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_request))
 
 if __name__ == "__main__":
     main()
