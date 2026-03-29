@@ -1,31 +1,22 @@
-from database.mongo import users, db
+from database.mongo import tasks, completed
 from modules.balance import add_balance
 
-tasks_col = db["tasks"]
-completed_col = db["completed_tasks"]
-
-# sample task reward
-TASK_REWARD = 1
-
 async def get_tasks():
-    tasks = []
-    async for t in tasks_col.find():
-        tasks.append(t)
-    return tasks
+    return [t async for t in tasks.find()]
 
-async def complete_task(user_id, task_id):
-    already = await completed_col.find_one({
+async def complete_task(user_id, task):
+    exists = await completed.find_one({
         "user_id": user_id,
-        "task_id": task_id
+        "task_id": task["_id"]
     })
 
-    if already:
+    if exists:
         return False
 
-    await completed_col.insert_one({
+    await completed.insert_one({
         "user_id": user_id,
-        "task_id": task_id
+        "task_id": task["_id"]
     })
 
-    await add_balance(user_id, task["reward"])
+    await add_balance(user_id, task.get("reward", 1))
     return True
