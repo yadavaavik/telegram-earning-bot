@@ -1,5 +1,7 @@
 import random
 
+# 🔥 Replace later with real API
 async def send_crypto(wallet, amount):
-    # simulate tx
-    return f"TX{random.randint(100000,999999)}"
+    # TODO: integrate CryptoBot API here
+    # For now safe simulation
+    return f"TX{random.randint(1000000,9999999)}"
