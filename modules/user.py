@@ -1,10 +1,7 @@
 from database.mongo import users
 
-async def get_user(user_id):
-    return await users.find_one({"user_id": user_id})
-
 async def create_user(user_id, ref=None):
-    user = await get_user(user_id)
+    user = await users.find_one({"user_id": user_id})
     if user:
         return user
 
@@ -14,7 +11,11 @@ async def create_user(user_id, ref=None):
         "earned": 0,
         "withdrawn": 0,
         "referrer": ref,
-        "wallet": None
+        "wallet": None,
+        "referrals": 0,
+        "last_daily": 0
     }
+
     await users.insert_one(data)
+    data["new"] = True
     return data
