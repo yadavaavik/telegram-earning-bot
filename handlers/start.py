@@ -1,33 +1,40 @@
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ContextTypes
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from utils.helpers import safe_handler
 from modules.user import create_user
 from modules.referral import process_referral
-from utils.helpers import safe_handler
+from utils.force_join import check_join
+from utils.admin import is_admin
 
 @safe_handler
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+async def start_cmd(update, context):
+    if not await check_join(update, context):
+        await update.message.reply_text("Join channels first")
+        return
 
-    ref = None
-    if context.args:
-        try:
-            ref = int(context.args[0])
-        except:
-            pass
+    uid = update.effective_user.id
 
-    user = await create_user(user_id, ref)
+    ref = int(context.args[0]) if context.args else None
 
-    if user.get("new", True):
-        await process_referral(user_id, ref)
+    user = await create_user(uid, ref)
+
+    if user.get("new"):
+        await process_referral(uid, ref)
 
     kb = [
-        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
-        [InlineKeyboardButton("👥 Refer", callback_data="refer")],
-        [InlineKeyboardButton("🎁 Daily Bonus", callback_data="daily")],
-        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")]
+        ["💰 Balance", "balance"],
+        ["👥 Refer", "refer"],
+        ["🎯 Tasks", "tasks"],
+        ["🎁 Daily", "daily"],
+        ["💸 Withdraw", "withdraw"],
+        ["🤖 My Bots", "subbot"]
     ]
 
+    buttons = [[InlineKeyboardButton(t, callback_data=d)] for t, d in kb]
+
+    if is_admin(uid):
+        buttons.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
+
     await update.message.reply_text(
-        "🚀 Welcome to Earning Bot",
-        reply_markup=InlineKeyboardMarkup(kb)
+        "Welcome",
+        reply_markup=InlineKeyboardMarkup(buttons)
     )
