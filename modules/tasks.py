@@ -27,5 +27,5 @@ async def complete_task(user_id, task_id):
         "task_id": task_id
     })
 
-    await add_balance(user_id, TASK_REWARD)
+    await add_balance(user_id, task["reward"])
     return True
