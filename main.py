@@ -572,8 +572,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ Task completed successfully!\n\n💰 Earned: ${reward}"
         )
 
-    except Exception as e:
-        print("Task Error:", e)
         await update.message.reply_text("❌ Something went wrong")
 
     return
