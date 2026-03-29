@@ -1,40 +1,47 @@
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
+from database.mongo import users
+from utils.force_join import check_join, join_button
 from utils.helpers import safe_handler
-from modules.user import create_user
-from modules.referral import process_referral
-from utils.force_join import check_join
-from utils.admin import is_admin
 
 @safe_handler
-async def start_cmd(update, context):
-    if not await check_join(update, context):
-        await update.message.reply_text("Join channels first")
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
+
+    # 👉 Create user if not exists
+    if not await users.find_one({"user_id": user_id}):
+        await users.insert_one({
+            "user_id": user_id,
+            "balance": 0,
+            "referrals": 0,
+            "earned": 0,
+            "withdrawn": 0
+        })
+
+    # 👉 FORCE JOIN CHECK
+    if not await check_join(context.bot, user_id):
+        await update.message.reply_text(
+            "⚠️ Please join our channel first",
+            reply_markup=join_button()
+        )
         return
 
-    uid = update.effective_user.id
-
-    ref = int(context.args[0]) if context.args else None
-
-    user = await create_user(uid, ref)
-
-    if user.get("new"):
-        await process_referral(uid, ref)
-
-    kb = [
-        ["💰 Balance", "balance"],
-        ["👥 Refer", "refer"],
-        ["🎯 Tasks", "tasks"],
-        ["🎁 Daily", "daily"],
-        ["💸 Withdraw", "withdraw"],
-        ["🤖 My Bots", "subbot"]
+    # 👉 MAIN MENU
+    keyboard = [
+        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
+        [InlineKeyboardButton("👥 Refer", callback_data="refer")],
+        [InlineKeyboardButton("🧩 Tasks", callback_data="tasks")],
+        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")],
     ]
 
-    buttons = [[InlineKeyboardButton(t, callback_data=d)] for t, d in kb]
-
-    if is_admin(uid):
-        buttons.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
+    # 👉 Admin button
+    import os
+    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+    if user_id == ADMIN_ID:
+        keyboard.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
 
     await update.message.reply_text(
-        "Welcome",
-        reply_markup=InlineKeyboardMarkup(buttons)
+        "🏠 Main Menu",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
