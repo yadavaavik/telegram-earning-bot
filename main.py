@@ -153,58 +153,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=admin_menu()
             )
 
-        # ===== ADMIN WITHDRAWS =====
-            if user_id not in ADMIN_IDS:
-                return
-
-            data = withdraws.find({"status": "completed"})
-
-            text = "📤 Withdraw Requests:\n\n"
-            buttons = []
-
-            for w in data:
-                wid = str(w["_id"])
-                text += f"{w['user_id']} | ₹{w['amount']}\n"
-
-                buttons.append([
-                    InlineKeyboardButton("✅", callback_data=f"ok_{wid}"),
-                    InlineKeyboardButton("❌", callback_data=f"no_{wid}")
-                ])
-
-            buttons.append([InlineKeyboardButton("🔙 Back", callback_data="back")])
-
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
-
-        # ===== APPROVE =====
-            wid = query.data.split("_")[1]
-
-            withdraws.update_one(
-                {"_id": ObjectId(wid)},
-                {"$set": {"status": "approved"}}
-            )
-
-            await query.answer("✅ Approved")
-
-        # ===== REJECT =====
-            wid = query.data.split("_")[1]
-
-            w = withdraws.find_one({"_id": ObjectId(wid)})
-
-            users.update_one(
-                {"user_id": w["user_id"]},
-                {"$inc": {"balance": w["amount"]}}
-            )
-
-            withdraws.update_one(
-                {"_id": ObjectId(wid)},
-                {"$set": {"status": "rejected"}}
-            )
-
-            await query.answer("❌ Rejected")
-
         # ===== BROADCAST =====
         elif query.data == "broadcast":
             if user_id not in ADMIN_IDS:
