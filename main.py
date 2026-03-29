@@ -139,16 +139,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         elif query.data == "withdraw":
-            if user["balance"] < MIN_WITHDRAW:
-                await query.edit_message_text(
-                    f"❌ Minimum ${MIN_WITHDRAW}",
-                    reply_markup=back_menu()
-                )
-            else:
-                context.user_data["awaiting_wallet"] = True
-                await query.message.reply_text(
-                    "💳 Send your crypto wallet address"
-                )
+    if user["balance"] < MIN_WITHDRAW:
+        await query.edit_message_text(
+            f"❌ Minimum ${MIN_WITHDRAW}",
+            reply_markup=back_menu()
+        )
+    else:
+        context.user_data["awaiting_wallet"] = True
+        await query.message.reply_text("💳 Send your wallet address")
 
         elif query.data == "admin_panel":
             if user_id not in ADMIN_IDS:
@@ -187,6 +185,78 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["broadcast"] = True
             await query.message.reply_text("Send message to broadcast")
 
+        # ===== APPROVE WITHDRAW =====
+elif query.data.startswith("approve_"):
+    if user_id not in ADMIN_IDS:
+        return
+
+    target_id = int(query.data.split("_")[1])
+
+    req = withdraws.find_one({
+        "user_id": target_id,
+        "status": "pending"
+    })
+
+    if not req:
+        await query.answer("Already processed")
+        return
+
+    amount = req["amount"]
+
+    withdraws.update_one(
+        {"_id": req["_id"]},
+        {"$set": {"status": "approved"}}
+    )
+
+    users.update_one(
+        {"user_id": target_id},
+        {"$inc": {"user_withdrawn": amount}}
+    )
+
+    await context.bot.send_message(
+        target_id,
+        f"✅ Withdraw Approved!\n\n💰 Amount: ${amount}"
+    )
+
+    await query.edit_message_text("✅ Approved")
+
+
+# ===== REJECT WITHDRAW =====
+elif query.data.startswith("reject_"):
+    if user_id not in ADMIN_IDS:
+        return
+
+    target_id = int(query.data.split("_")[1])
+
+    req = withdraws.find_one({
+        "user_id": target_id,
+        "status": "pending"
+    })
+
+    if not req:
+        await query.answer("Already processed")
+        return
+
+    amount = req["amount"]
+
+    withdraws.update_one(
+        {"_id": req["_id"]},
+        {"$set": {"status": "rejected"}}
+    )
+
+    # refund balance
+    users.update_one(
+        {"user_id": target_id},
+        {"$inc": {"balance": amount}}
+    )
+
+    await context.bot.send_message(
+        target_id,
+        "❌ Withdraw Rejected (amount refunded)"
+    )
+
+    await query.edit_message_text("❌ Rejected")
+
     except Exception as e:
         print("BUTTON ERROR:", e)
 
@@ -211,37 +281,54 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"✅ Sent to {sent} users")
             return
 
-        # ===== WITHDRAW =====
-        if context.user_data.get("awaiting_wallet"):
-            user = users.find_one({"user_id": user_id})
-            amount = user["balance"]
+        # ===== WITHDRAW REQUEST =====
+if context.user_data.get("awaiting_wallet"):
+    user = users.find_one({"user_id": user_id})
+    amount = user["balance"]
 
-            withdraws.insert_one({
-                "user_id": user_id,
-                "wallet": text,
-                "amount": amount,
-                "status": "completed"
-            })
+    if amount < MIN_WITHDRAW:
+        await update.message.reply_text("❌ Not enough balance")
+        return
 
-            users.update_one(
-                {"user_id": user_id},
-                {
-                    "$set": {"balance": 0},
-                    "$inc": {"user_withdrawn": amount}
-                }
+    # Create withdraw request
+    withdraws.insert_one({
+        "user_id": user_id,
+        "wallet": text,
+        "amount": amount,
+        "status": "pending"
+    })
+
+    # lock balance (optional advanced logic)
+    users.update_one(
+        {"user_id": user_id},
+        {"$set": {"balance": 0}}
+    )
+
+    context.user_data["awaiting_wallet"] = False
+
+    # Notify admin
+    for admin in ADMIN_IDS:
+        try:
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"),
+                    InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")
+                ]
+            ])
+
+            await context.bot.send_message(
+                admin,
+                f"💸 Withdraw Request\n\nUser: {user_id}\nAmount: ${amount}\nWallet: {text}",
+                reply_markup=keyboard
             )
+        except:
+            pass
 
-            context.user_data["awaiting_wallet"] = False
-
-            await update.message.reply_text(
-                f"✅ Withdraw processed instantly 💸\n\n💰 Amount: ${round(amount, 2)}",
-                reply_markup=main_menu(user_id)
-            )
-            return
-
-    except Exception as e:
-        print("MESSAGE ERROR:", e)
-
+    await update.message.reply_text(
+        "⏳ Withdraw request sent for approval",
+        reply_markup=main_menu(user_id)
+    )
+    return
 # ========= MAIN =========
 def main():
     try:
