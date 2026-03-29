@@ -1,5 +1,8 @@
 import os
 import logging
+import os
+import logging
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
@@ -21,14 +24,31 @@ MIN_WITHDRAW = 1.0
 # ========= DB =========
 client = MongoClient(MONGO_URI)
 db = client["telegram_bot"]
+
 users = db["users"]
 withdraws = db["withdraws"]
+tasks = db["tasks"]   # 🔥 PRO FEATURE
+
+# ========= USER STRUCTURE =========
+def create_user(uid, name):
+    return {
+        "user_id": uid,
+        "name": name,
+        "balance": 0.0,
+        "referrals": 0,
+        "user_earned": 0.0,
+        "user_withdrawn": 0.0,
+        "referred_by": None,
+        "join_date": str(datetime.now().date()),
+        "is_banned": False
+    }
 
 # ========= MENUS =========
 def main_menu(user_id):
     keyboard = [
         [InlineKeyboardButton("💰 Balance", callback_data="balance")],
         [InlineKeyboardButton("👥 Refer", callback_data="refer")],
+        [InlineKeyboardButton("🧩 Tasks", callback_data="tasks")],  # 🔥 NEW
         [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")]
     ]
 
@@ -48,6 +68,7 @@ def admin_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📊 Stats", callback_data="stats")],
         [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
+        [InlineKeyboardButton("➕ Add Task", callback_data="add_task")],  # 🔥 PRO
         [InlineKeyboardButton("🔙 Back", callback_data="back")]
     ])
 
@@ -66,15 +87,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     existing = users.find_one({"user_id": uid})
 
     if not existing:
-        users.insert_one({
-            "user_id": uid,
-            "name": user.first_name,
-            "balance": 0.0,
-            "referrals": 0,
-            "user_earned": 0.0,
-            "user_withdrawn": 0.0,
-            "referred_by": None
-        })
+        users.insert_one(create_user(uid, user.first_name))
 
         if ref_id and ref_id != uid:
             ref_user = users.find_one({"user_id": ref_id})
@@ -87,13 +100,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "user_earned": REFERRAL_REWARD
                     }}
                 )
+
                 users.update_one(
                     {"user_id": uid},
                     {"$set": {"referred_by": ref_id}}
                 )
 
     await update.message.reply_text(
-        f"🎉 Welcome {user.first_name}!\nEarn ${REFERRAL_REWARD} per referral 💸",
+        f"🎉 Welcome {user.first_name}!\nEarn money easily 💸",
         reply_markup=main_menu(uid)
     )
 
@@ -117,10 +131,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ===== BALANCE =====
     elif data == "balance":
         msg = (
-            f"💰 Balance: ${round(user['balance'], 2)}\n"
-            f"👥 Referrals: {user['referrals']}\n"
-            f"📈 Earned: ${round(user['user_earned'], 2)}\n"
-            f"💸 Withdrawn: ${round(user['user_withdrawn'], 2)}"
+            f"💰 Balance: ${round(user.get('balance',0),2)}\n"
+            f"👥 Referrals: {user.get('referrals',0)}\n"
+            f"📈 Earned: ${round(user.get('user_earned',0),2)}\n"
+            f"💸 Withdrawn: ${round(user.get('user_withdrawn',0),2)}"
         )
         await query.edit_message_text(msg, reply_markup=back_menu())
 
@@ -134,100 +148,85 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_menu()
         )
 
+    # ===== TASKS (PRO FEATURE) =====
+    elif data == "tasks":
+        all_tasks = list(tasks.find())
+
+        if not all_tasks:
+            await query.edit_message_text("No tasks available", reply_markup=back_menu())
+            return
+
+        keyboard = []
+        for t in all_tasks:
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"{t['title']} (${t['reward']})",
+                    callback_data=f"do_task_{t['_id']}"
+                )
+            ])
+
+        keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back")])
+
+        await query.edit_message_text("🧩 Available Tasks:", reply_markup=InlineKeyboardMarkup(keyboard))
+
     # ===== WITHDRAW =====
     elif data == "withdraw":
         if user["balance"] < MIN_WITHDRAW:
-            await query.edit_message_text(
-                f"❌ Minimum withdraw is ${MIN_WITHDRAW}",
-                reply_markup=back_menu()
-            )
+            await query.edit_message_text(f"❌ Min ${MIN_WITHDRAW}", reply_markup=back_menu())
         else:
             context.user_data["awaiting_wallet"] = True
-            await query.message.reply_text("💳 Send your wallet address")
+            await query.message.reply_text("💳 Send wallet / UPI")
 
-    # ===== ADMIN PANEL =====
+    # ===== ADMIN =====
     elif data == "admin":
         if user_id not in ADMIN_IDS:
             return
         await query.edit_message_text("👑 Admin Panel", reply_markup=admin_menu())
 
-    # ===== STATS =====
-    elif data == "stats":
+    # ===== ADD TASK =====
+    elif data == "add_task":
         if user_id not in ADMIN_IDS:
             return
-
-        total_users = users.count_documents({})
-        total_earned = sum(u.get("user_earned", 0) for u in users.find())
-        total_withdrawn = sum(u.get("user_withdrawn", 0) for u in users.find())
-
-        profit = total_earned - total_withdrawn
-
-        text = (
-            f"📊 Stats\n\n"
-            f"👥 Users: {total_users}\n"
-            f"📈 Earned: ${round(total_earned,2)}\n"
-            f"💸 Withdrawn: ${round(total_withdrawn,2)}\n"
-            f"💰 Profit: ${round(profit,2)}"
-        )
-
-        await query.edit_message_text(text, reply_markup=back_menu())
-
-    # ===== BROADCAST =====
-    elif data == "broadcast":
-        if user_id not in ADMIN_IDS:
-            return
-
-        context.user_data["broadcast"] = True
-        await query.message.reply_text("Send message to broadcast")
-
-    # ===== APPROVE =====
-    elif data.startswith("approve_"):
-        if user_id not in ADMIN_IDS:
-            return
-
-        target_id = int(data.split("_")[1])
-        req = withdraws.find_one({"user_id": target_id, "status": "pending"})
-
-        if not req:
-            await query.answer("Already processed")
-            return
-
-        amount = req["amount"]
-
-        withdraws.update_one({"_id": req["_id"]}, {"$set": {"status": "approved"}})
-        users.update_one({"user_id": target_id}, {"$inc": {"user_withdrawn": amount}})
-
-        await context.bot.send_message(target_id, f"✅ Withdraw Approved\n💰 ${amount}")
-        await query.edit_message_text("✅ Approved")
-
-    # ===== REJECT =====
-    elif data.startswith("reject_"):
-        if user_id not in ADMIN_IDS:
-            return
-
-        target_id = int(data.split("_")[1])
-        req = withdraws.find_one({"user_id": target_id, "status": "pending"})
-
-        if not req:
-            await query.answer("Already processed")
-            return
-
-        amount = req["amount"]
-
-        withdraws.update_one({"_id": req["_id"]}, {"$set": {"status": "rejected"}})
-        users.update_one({"user_id": target_id}, {"$inc": {"balance": amount}})
-
-        await context.bot.send_message(target_id, "❌ Withdraw Rejected (Refunded)")
-        await query.edit_message_text("❌ Rejected")
-
+        context.user_data["add_task"] = True
+        await query.message.reply_text("Send task in format:\nTitle | Link | Reward")
+        
 # ========= MESSAGE HANDLER =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
 
-    # ===== BROADCAST =====
+    user = users.find_one({"user_id": user_id})
+
+    if not user:
+        return
+
+    # =========================
+    # 🔥 ADMIN: ADD TASK
+    # =========================
+    if context.user_data.get("add_task"):
+        try:
+            title, link, reward = text.split("|")
+
+            tasks.insert_one({
+                "title": title.strip(),
+                "link": link.strip(),
+                "reward": float(reward.strip())
+            })
+
+            await update.message.reply_text("✅ Task Added Successfully")
+
+        except Exception as e:
+            await update.message.reply_text("❌ Format:\nTitle | Link | Reward")
+
+        context.user_data["add_task"] = False
+        return
+
+    # =========================
+    # 📢 BROADCAST SYSTEM
+    # =========================
     if context.user_data.get("broadcast"):
         sent = 0
+
         for u in users.find():
             try:
                 await context.bot.send_message(u["user_id"], text)
@@ -236,49 +235,98 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
 
         context.user_data["broadcast"] = False
-        await update.message.reply_text(f"✅ Sent to {sent} users")
+        await update.message.reply_text(f"✅ Broadcast sent to {sent} users")
         return
 
-    # ===== WITHDRAW FLOW =====
+    # =========================
+    # 💸 WITHDRAW FLOW
+    # =========================
     if context.user_data.get("awaiting_wallet"):
-        user = users.find_one({"user_id": user_id})
-        amount = user["balance"]
+        amount = user.get("balance", 0)
 
         if amount < MIN_WITHDRAW:
             await update.message.reply_text("❌ Not enough balance")
             return
 
+        # Create request
         withdraws.insert_one({
             "user_id": user_id,
             "wallet": text,
             "amount": amount,
-            "status": "pending"
+            "status": "pending",
+            "date": str(datetime.now())
         })
 
-        users.update_one({"user_id": user_id}, {"$set": {"balance": 0}})
+        # Lock balance
+        users.update_one(
+            {"user_id": user_id},
+            {"$set": {"balance": 0}}
+        )
+
         context.user_data["awaiting_wallet"] = False
 
-        # notify admin
+        # Notify admins
         for admin in ADMIN_IDS:
-            keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"),
-                    InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")
-                ]
-            ])
+            try:
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"),
+                        InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")
+                    ]
+                ])
 
-            await context.bot.send_message(
-                admin,
-                f"💸 Withdraw Request\n\nUser: {user_id}\nAmount: ${amount}\nWallet: {text}",
-                reply_markup=keyboard
+                await context.bot.send_message(
+                    admin,
+                    f"💸 Withdraw Request\n\n"
+                    f"👤 User: {user_id}\n"
+                    f"💰 Amount: ${amount}\n"
+                    f"🏦 Wallet: {text}",
+                    reply_markup=keyboard
+                )
+            except:
+                pass
+
+        await update.message.reply_text(
+            "⏳ Withdraw request sent for approval",
+            reply_markup=main_menu(user_id)
+        )
+        return
+
+    # =========================
+    # 🧩 TASK COMPLETION (MANUAL)
+    # =========================
+    if text.startswith("/done_"):
+        try:
+            task_id = text.split("_")[1]
+
+            task = tasks.find_one({"_id": task_id})
+
+            if not task:
+                await update.message.reply_text("❌ Task not found")
+                return
+
+            reward = float(task["reward"])
+
+            users.update_one(
+                {"user_id": user_id},
+                {
+                    "$inc": {
+                        "balance": reward,
+                        "user_earned": reward
+                    }
+                }
             )
 
-        await update.message.reply_text("⏳ Request sent", reply_markup=main_menu(user_id))
+            await update.message.reply_text(f"✅ Task completed! +${reward}")
 
+        except Exception as e:
+            await update.message.reply_text("❌ Invalid task command")
+
+        return
 # ========= MAIN =========
 def main():
     if not BOT_TOKEN or not MONGO_URI:
-        print("❌ Missing ENV")
+        print("Missing ENV")
         return
 
     app = Application.builder().token(BOT_TOKEN).build()
@@ -287,7 +335,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    print("🚀 Bot Running...")
+    print("🚀 Running...")
     app.run_polling()
 
 
