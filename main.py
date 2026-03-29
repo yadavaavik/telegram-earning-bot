@@ -4,27 +4,22 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from pymongo import MongoClient
 
-# ENV VARIABLES
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-app.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# MongoDB Setup
 client = MongoClient(MONGO_URI)
 db = client["telegram_bot"]
 users = db["users"]
 
-# Flask App
 app = Flask(__name__)
 
-# Telegram Bot App
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 
-# START COMMAND
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ✅ FIXED START FUNCTION
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    username = update.effective_user.username or "NoUsername"
+    username = update.effective_user.username or "User"
 
     user = users.find_one({"user_id": user_id})
 
@@ -40,25 +35,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "referrals": 0
         })
 
-        await update.message.reply_text(
-            "✅ You are registered!"
-        )
+        await update.message.reply_text("✅ You are registered!")
 
 telegram_app.add_handler(CommandHandler("start", start))
 
-# WEBHOOK ROUTE
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), telegram_app.bot)
     telegram_app.update_queue.put_nowait(update)
     return "ok"
 
-# HOME ROUTE
 @app.route("/")
 def home():
     return "Bot is running!"
 
-# START SERVER
 if __name__ == "__main__":
     import asyncio
 
