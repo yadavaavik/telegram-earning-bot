@@ -289,6 +289,28 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = users.find_one({"user_id": user_id})
     amount = user["balance"]
 
+    withdraws.insert_one({
+        "user_id": user_id,
+        "wallet": text,
+        "amount": amount,
+        "status": "completed"
+    })
+
+    users.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {"balance": 0},
+            "$inc": {"user_withdrawn": amount}
+        }
+    )
+
+    context.user_data["awaiting_wallet"] = False
+
+    await update.message.reply_text(
+        f"✅ Withdraw processed instantly 💸\n\n💰 Amount: ${round(amount, 2)}",
+        reply_markup=main_menu(user_id)
+    )
+
     # Save withdraw
     withdraws.insert_one({
         "user_id": user_id,
