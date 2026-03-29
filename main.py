@@ -1,10 +1,10 @@
 import os
-import asyncio
 import logging
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from pymongo import MongoClient
+import asyncio
 
 # ========= LOGGING =========
 logging.basicConfig(level=logging.INFO)
@@ -22,14 +22,9 @@ client = MongoClient(MONGO_URI)
 db = client["telegram_bot"]
 users = db["users"]
 
-# ========= FLASK =========
+# ========= APP =========
 app = Flask(__name__)
 
-# ========= EVENT LOOP =========
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
-# ========= TELEGRAM =========
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 
 # ========= MENU =========
@@ -47,18 +42,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = user.first_name
 
     referrer_id = None
-
-    # ✅ Get referral ID
     if context.args:
         try:
             referrer_id = int(context.args[0])
         except:
-            referrer_id = None
+            pass
 
-    existing_user = users.find_one({"user_id": user_id})
+    existing = users.find_one({"user_id": user_id})
 
-    # ========= NEW USER =========
-    if not existing_user:
+    if not existing:
         users.insert_one({
             "user_id": user_id,
             "name": name,
@@ -67,116 +59,74 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "referred_by": referrer_id
         })
 
-        # ✅ Referral reward
+        # Referral reward
         if referrer_id and referrer_id != user_id:
-            ref_user = users.find_one({"user_id": referrer_id})
+            users.update_one(
+                {"user_id": referrer_id},
+                {"$inc": {"balance": 10, "referrals": 1}}
+            )
 
-            if ref_user:
-                users.update_one(
-                    {"user_id": referrer_id},
-                    {
-                        "$inc": {
-                            "balance": 10,
-                            "referrals": 1
-                        }
-                    }
-                )
+        text = f"🎉 Welcome {name}!\n\nEarn ₹10 per referral 💸"
 
-        await update.message.reply_text(
-            f"🎉 *Welcome {name}!*\n\n"
-            f"💸 Earn *₹10 per referral*\n"
-            f"🚀 Invite friends & grow your balance!\n\n"
-            f"👇 Choose an option below",
-            reply_markup=menu(),
-            parse_mode="Markdown"
-        )
-
-    # ========= EXISTING USER =========
     else:
-        await update.message.reply_text(
-            f"👋 *Welcome back {name}!*\n\n"
-            f"💰 Keep earning with referrals!",
-            reply_markup=menu(),
-            parse_mode="Markdown"
-        )
+        text = f"👋 Welcome back {name}!"
+
+    await update.message.reply_text(text, reply_markup=menu())
 
 # ========= BUTTON =========
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = query.from_user.id
-    user = users.find_one({"user_id": user_id})
-
+    user = users.find_one({"user_id": query.from_user.id})
     if not user:
         return
 
-    # ========= BALANCE =========
     if query.data == "balance":
-        await query.edit_message_text(
-            f"💰 *Your Balance:* ₹{user['balance']}\n"
-            f"👥 *Total Referrals:* {user['referrals']}",
-            reply_markup=menu(),
-            parse_mode="Markdown"
-        )
+        msg = f"💰 Balance: ₹{user['balance']}\n👥 Referrals: {user['referrals']}"
 
-    # ========= REFER =========
     elif query.data == "refer":
         bot_username = (await context.bot.get_me()).username
-        link = f"https://t.me/{bot_username}?start={user_id}"
+        link = f"https://t.me/{bot_username}?start={user['user_id']}"
+        msg = f"👥 Invite & Earn ₹10\n\n🔗 {link}"
 
-        await query.edit_message_text(
-            f"👥 *Refer & Earn*\n\n"
-            f"💸 Earn ₹10 per friend\n\n"
-            f"🔗 Your link:\n{link}",
-            reply_markup=menu(),
-            parse_mode="Markdown"
-        )
-
-    # ========= WITHDRAW =========
     elif query.data == "withdraw":
         if user["balance"] < 100:
-            msg = "❌ Minimum withdraw is ₹100"
+            msg = "❌ Minimum withdraw ₹100"
         else:
-            msg = "💸 Withdraw request received (manual process)"
+            msg = "💸 Withdraw request noted (manual)"
 
-        await query.edit_message_text(
-            msg,
-            reply_markup=menu()
-        )
+    await query.edit_message_text(msg, reply_markup=menu())
 
 # ========= HANDLERS =========
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CallbackQueryHandler(button))
 
 # ========= WEBHOOK =========
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+@app.route("/", methods=["POST"])
 def webhook():
     try:
         data = request.get_json(force=True)
         update = Update.de_json(data, telegram_app.bot)
 
-        asyncio.run_coroutine_threadsafe(
-            telegram_app.process_update(update),
-            loop
-        )
+        asyncio.run(telegram_app.process_update(update))
 
     except Exception as e:
-        logging.error(f"Webhook error: {e}")
+        logging.error(f"Error: {e}")
 
     return "ok"
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
     return "✅ Bot is running!"
 
 # ========= MAIN =========
 if __name__ == "__main__":
-    loop.run_until_complete(telegram_app.initialize())
-    loop.run_until_complete(telegram_app.start())
+    async def setup():
+        await telegram_app.initialize()
+        await telegram_app.start()
+        await telegram_app.bot.set_webhook(WEBHOOK_URL)
 
-    loop.run_until_complete(
-        telegram_app.bot.set_webhook(f"{WEBHOOK_URL}/{BOT_TOKEN}")
-    )
+    asyncio.run(setup())
 
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
