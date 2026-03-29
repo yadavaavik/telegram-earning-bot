@@ -1,37 +1,31 @@
-from telegram import Update
-from telegram.ext import ContextTypes
-from database.mongo import users, withdraws
-from modules.balance import deduct_balance
-from payments.crypto import send_crypto
 from utils.helpers import safe_handler
-
-MIN_WITHDRAW = 10
+from database.mongo import users, withdraws
+from payments.crypto import send_crypto
+from modules.balance import deduct_balance
+from handlers.subbot import token_handler
 
 @safe_handler
-async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+async def msg_handler(update, context):
+    uid = update.effective_user.id
     text = update.message.text
 
-    if context.user_data.get("await_wallet"):
-        user = await users.find_one({"user_id": user_id})
+    await token_handler(update, context)
 
-        if user["balance"] < MIN_WITHDRAW:
-            await update.message.reply_text("❌ Minimum withdraw not reached")
+    if context.user_data.get("w"):
+        user = await users.find_one({"user_id": uid})
+
+        if user["balance"] < 10:
+            await update.message.reply_text("Min not reached")
             return
 
-        amount = user["balance"]
-
-        tx = await send_crypto(text, amount)
-
-        await deduct_balance(user_id, amount)
+        tx = await send_crypto(text, user["balance"])
+        await deduct_balance(uid, user["balance"])
 
         await withdraws.insert_one({
-            "user_id": user_id,
-            "amount": amount,
-            "wallet": text,
+            "user_id": uid,
+            "amount": user["balance"],
             "tx": tx
         })
 
-        await update.message.reply_text(f"✅ Withdraw sent\nTX: {tx}")
-
-        context.user_data["await_wallet"] = False
+        await update.message.reply_text(f"Sent {tx}")
+        context.user_data["w"] = False
