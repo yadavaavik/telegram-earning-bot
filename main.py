@@ -356,15 +356,41 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ========= MESSAGE HANDLER =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    text = update.message.text
+    text = update.message.text.strip()
 
     user = users.find_one({"user_id": user_id})
-
     if not user:
         return
 
     # =========================
-    # 🔥 ADMIN: ADD TASK
+    # 🚫 BAN CHECK
+    # =========================
+    if user.get("is_banned", False):
+        await update.message.reply_text("🚫 You are banned from using this bot")
+        return
+
+    # =========================
+    # 🚫 BAN USER SYSTEM (ADMIN)
+    # =========================
+    if context.user_data.get("ban_mode"):
+        try:
+            target_id = int(text)
+
+            users.update_one(
+                {"user_id": target_id},
+                {"$set": {"is_banned": True}}
+            )
+
+            await update.message.reply_text(f"✅ User {target_id} banned")
+
+        except:
+            await update.message.reply_text("❌ Invalid user ID")
+
+        context.user_data["ban_mode"] = False
+        return
+
+    # =========================
+    # ➕ ADD TASK (ADMIN)
     # =========================
     if context.user_data.get("add_task"):
         try:
@@ -376,41 +402,21 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "reward": float(reward.strip())
             })
 
-                 await update.message.reply_text("✅ Task Added Successfully")
+            await update.message.reply_text("✅ Task added successfully")
 
-             except Exception as e:
-                 await update.message.reply_text("❌ Format:\nTitle | Link | Reward")
-   
-            context.user_data["add_task"] = False
+        except:
+            await update.message.reply_text("❌ Format:\nTitle | Link | Reward")
+
+        context.user_data["add_task"] = False
         return
 
     # =========================
-# 🚫 BAN USER SYSTEM
-# =========================
-if context.user_data.get("ban_mode"):
-    try:
-        target_id = int(text)
-
-        users.update_one(
-            {"user_id": target_id},
-            {"$set": {"is_banned": True}}
-        )
-
-        await update.message.reply_text(f"✅ User {target_id} banned")
-
-    except:
-        await update.message.reply_text("❌ Invalid user ID")
-
-    context.user_data["ban_mode"] = False
-    return
-
-    # =========================
-    # 📢 BROADCAST SYSTEM
+    # 📢 BROADCAST (ADMIN)
     # =========================
     if context.user_data.get("broadcast"):
         sent = 0
 
-        for u in users.find():
+        for u in users.find({}, {"user_id": 1}):
             try:
                 await context.bot.send_message(u["user_id"], text)
                 sent += 1
@@ -429,9 +435,10 @@ if context.user_data.get("ban_mode"):
 
         if amount < MIN_WITHDRAW:
             await update.message.reply_text("❌ Not enough balance")
+            context.user_data["awaiting_wallet"] = False
             return
 
-        # Create request
+        # Save withdraw request
         withdraws.insert_one({
             "user_id": user_id,
             "wallet": text,
@@ -440,7 +447,7 @@ if context.user_data.get("ban_mode"):
             "date": str(datetime.now())
         })
 
-        # Lock balance
+        # Reset balance
         users.update_one(
             {"user_id": user_id},
             {"$set": {"balance": 0}}
@@ -469,74 +476,53 @@ if context.user_data.get("ban_mode"):
             except:
                 pass
 
-        await update.message.reply_text(
-            "⏳ Withdraw request sent for approval",
-            reply_markup=main_menu(user_id)
-        )
+        await update.message.reply_text("⏳ Withdraw request sent")
         return
 
     # =========================
-    # 🧩 TASK COMPLETION (PRO)
+    # 🧩 TASK COMPLETION (ULTIMATE)
     # =========================
     if text.startswith("/done_"):
         try:
             parts = text.split("_")
 
-            # 🚫 Invalid format protection
             if len(parts) < 2:
-                await update.message.reply_text("❌ Invalid format. Use /done_taskid")
-                return
+                return await update.message.reply_text("❌ Invalid format")
 
             task_id = parts[1]
 
-            # 🔍 Validate ObjectId
+            # Validate ObjectId
             try:
                 obj_id = ObjectId(task_id)
             except:
-                await update.message.reply_text("❌ Invalid task ID")
-                return
+                return await update.message.reply_text("❌ Invalid task ID")
 
             task = tasks.find_one({"_id": obj_id})
 
             if not task:
-                await update.message.reply_text("❌ Task not found")
-                return
+                return await update.message.reply_text("❌ Task not found")
 
-            # =========================
-            # 🛡️ USER DATA SAFETY
-            # =========================
+            # Ensure completed_tasks exists
             if "completed_tasks" not in user:
                 users.update_one(
                     {"user_id": user_id},
                     {"$set": {"completed_tasks": []}}
                 )
-                user["completed_tasks"] = []
 
+            # Refresh user
             user = users.find_one({"user_id": user_id})
-completed_tasks = user.get("completed_tasks", [])
+            completed_tasks = user.get("completed_tasks", [])
 
-            # 🚫 Duplicate protection
+            # Prevent duplicate
             if task_id in completed_tasks:
-                await update.message.reply_text("⚠️ You already completed this task")
-                return
+                return await update.message.reply_text("⚠️ Already completed")
 
-            # =========================
-            # 💰 REWARD VALIDATION
-            # =========================
-            reward = task.get("reward", 0)
-
-            try:
-                reward = float(reward)
-            except:
-                reward = 0
+            reward = float(task.get("reward", 0))
 
             if reward <= 0:
-                await update.message.reply_text("❌ Invalid reward for this task")
-                return
+                return await update.message.reply_text("❌ Invalid reward")
 
-            # =========================
-            # 💰 CREDIT REWARD
-            # =========================
+            # Credit reward
             users.update_one(
                 {"user_id": user_id},
                 {
@@ -548,18 +534,13 @@ completed_tasks = user.get("completed_tasks", [])
                 }
             )
 
-            # =========================
-            # 🎉 SUCCESS RESPONSE
-            # =========================
             await update.message.reply_text(
-                f"✅ Task completed!\n\n"
-                f"💰 Earned: ${round(reward, 2)}\n"
-                f"📈 Keep going 🚀"
+                f"✅ Task completed!\n💰 +${round(reward,2)}"
             )
 
         except Exception as e:
-            print("Task Completion Error:", e)
-            await update.message.reply_text("❌ Something went wrong. Try again.")
+            print("Task Error:", e)
+            await update.message.reply_text("❌ Something went wrong")
 
         return
 
