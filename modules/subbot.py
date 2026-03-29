@@ -9,5 +9,5 @@ async def add_bot(owner, token, username):
         "time": int(time.time())
     })
 
-async def get_bots(owner):
+async def get_user_bots(owner):
     return [b async for b in bots.find({"owner": owner})]
