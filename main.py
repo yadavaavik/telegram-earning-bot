@@ -100,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except Exception as e:
-    print(e)
+        print(e)
 
 # ========= BUTTON =========
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -186,8 +186,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("Send message to broadcast")
 
         elif query.data.startswith("approve_"):
-    if user_id not in ADMIN_IDS:
-        return
+            if user_id not in ADMIN_IDS:
+                return
+
+        elif query.data.startswith("reject_"):
+            if user_id not in ADMIN_IDS:
+                return
 
     
         # ===== APPROVE WITHDRAW =====
@@ -225,9 +229,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ===== REJECT WITHDRAW =====
-elif query.data.startswith("reject_"):
-    if user_id not in ADMIN_IDS:
-        return
 
     target_id = int(query.data.split("_")[1])
 
@@ -264,11 +265,6 @@ elif query.data.startswith("reject_"):
         print("BUTTON ERROR:", e)
 
 # ========= MESSAGE =========
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        user_id = update.effective_user.id
-        text = update.message.text
-
         # ===== BROADCAST =====
         if context.user_data.get("broadcast"):
             sent = 0
@@ -291,13 +287,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = update.message.text
 
         if context.user_data.get("awaiting_wallet"):
-            user = users.find_one({"user_id": user_id})
-    user = users.find_one({"user_id": user_id})
-    amount = user["balance"]
+               user = users.find_one({"user_id": user_id})
+               amount = user["balance"]
 
-    if amount < MIN_WITHDRAW:
-        await update.message.reply_text("❌ Not enough balance")
-        return
+               if amount < MIN_WITHDRAW:
+                   await update.message.reply_text("❌ Not enough balance")
+                   return
 
     # Create withdraw request
     withdraws.insert_one({
