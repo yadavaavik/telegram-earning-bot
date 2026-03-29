@@ -13,7 +13,8 @@ async def create_user(user_id, ref=None):
         "referrer": ref,
         "wallet": None,
         "referrals": 0,
-        "last_daily": 0
+        "last_daily": 0,
+        "last_withdraw": 0   # 🔥 added
     }
 
     await users.insert_one(data)
