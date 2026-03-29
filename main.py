@@ -13,7 +13,8 @@ logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
-ADMIN_ID = [8250329715]
+
+ADMIN_IDS = [8250329715]  # ✅ your admin ID
 
 # ========= DB =========
 client = MongoClient(MONGO_URI)
@@ -22,17 +23,24 @@ users = db["users"]
 withdraws = db["withdraws"]
 
 # ========= MENUS =========
-def main_menu():
-    return InlineKeyboardMarkup([
+def main_menu(user_id):
+    keyboard = [
         [InlineKeyboardButton("💰 Balance", callback_data="balance")],
         [InlineKeyboardButton("👥 Refer", callback_data="refer")],
         [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")]
-    ])
+    ]
+
+    if user_id in ADMIN_IDS:
+        keyboard.append([InlineKeyboardButton("👑 Admin", callback_data="admin_panel")])
+
+    return InlineKeyboardMarkup(keyboard)
+
 
 def back_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔙 Back", callback_data="back")]
     ])
+
 
 def admin_menu():
     return InlineKeyboardMarkup([
@@ -44,9 +52,6 @@ def admin_menu():
 # ========= START =========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        if not update.message:
-            return
-
         user = update.effective_user
         uid = user.id
 
@@ -68,7 +73,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "referred_by": None
             })
 
-            # referral logic
+            # referral
             if ref_id and ref_id != uid:
                 ref_user = users.find_one({"user_id": ref_id})
                 if ref_user:
@@ -82,8 +87,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
 
         await update.message.reply_text(
-            f"🎉 Welcome {user.first_name}!",
-            reply_markup=main_menu()
+            f"🎉 Welcome {user.first_name}!\nEarn ₹10 per referral 💸",
+            reply_markup=main_menu(uid)
         )
 
     except Exception as e:
@@ -95,14 +100,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
-        user = users.find_one({"user_id": query.from_user.id})
+        user_id = query.from_user.id
+        user = users.find_one({"user_id": user_id})
 
         if not user:
             return
 
         # ===== BACK =====
         if query.data == "back":
-            await query.edit_message_text("🏠 Main Menu", reply_markup=main_menu())
+            await query.edit_message_text(
+                "🏠 Main Menu",
+                reply_markup=main_menu(user_id)
+            )
 
         # ===== BALANCE =====
         elif query.data == "balance":
@@ -112,7 +121,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ===== REFER =====
         elif query.data == "refer":
             bot = await context.bot.get_me()
-            link = f"https://t.me/{bot.username}?start={user['user_id']}"
+            link = f"https://t.me/{bot.username}?start={user_id}"
             await query.edit_message_text(link, reply_markup=back_menu())
 
         # ===== WITHDRAW =====
@@ -126,14 +135,25 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data["awaiting_wallet"] = True
                 await query.message.reply_text("Send crypto wallet address")
 
+        # ===== ADMIN PANEL =====
+        elif query.data == "admin_panel":
+            if user_id not in ADMIN_IDS:
+                await query.answer("Not allowed ❌", show_alert=True)
+                return
+
+            await query.edit_message_text(
+                "👑 Admin Panel",
+                reply_markup=admin_menu()
+            )
+
         # ===== ADMIN WITHDRAWS =====
         elif query.data == "admin_withdraws":
-            if query.from_user.id != ADMIN_ID:
+            if user_id not in ADMIN_IDS:
                 return
 
             data = withdraws.find({"status": "pending"})
 
-            text = "📤 Withdraws:\n\n"
+            text = "📤 Withdraw Requests:\n\n"
             buttons = []
 
             for w in data:
@@ -147,7 +167,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             buttons.append([InlineKeyboardButton("🔙 Back", callback_data="back")])
 
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
 
         # ===== APPROVE =====
         elif query.data.startswith("ok_"):
@@ -158,7 +181,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 {"$set": {"status": "approved"}}
             )
 
-            await query.answer("Approved")
+            await query.answer("✅ Approved")
 
         # ===== REJECT =====
         elif query.data.startswith("no_"):
@@ -176,25 +199,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 {"$set": {"status": "rejected"}}
             )
 
-            await query.answer("Rejected")
+            await query.answer("❌ Rejected")
 
         # ===== BROADCAST =====
         elif query.data == "broadcast":
-            if query.from_user.id != ADMIN_ID:
+            if user_id not in ADMIN_IDS:
                 return
 
             context.user_data["broadcast"] = True
-            await query.message.reply_text("Send message")
+            await query.message.reply_text("Send message to broadcast")
 
     except Exception as e:
         print("BUTTON ERROR:", e)
 
-# ========= MESSAGE HANDLER =========
+# ========= MESSAGE =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        if not update.message:
-            return
-
         user_id = update.effective_user.id
         text = update.message.text
 
@@ -210,7 +230,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pass
 
             context.user_data["broadcast"] = False
-            await update.message.reply_text(f"✅ Sent to {sent}")
+            await update.message.reply_text(f"✅ Sent to {sent} users")
             return
 
         # ===== WITHDRAW =====
@@ -231,28 +251,23 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             context.user_data["awaiting_wallet"] = False
 
-            await update.message.reply_text("✅ Withdraw submitted", reply_markup=main_menu())
+            await update.message.reply_text(
+                "✅ Withdraw submitted",
+                reply_markup=main_menu(user_id)
+            )
 
     except Exception as e:
         print("MSG ERROR:", e)
-
-# ========= ADMIN =========
-async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    await update.message.reply_text("👑 Admin", reply_markup=admin_menu())
 
 # ========= MAIN =========
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    print("🚀 Running...")
+    print("🚀 Bot Running...")
     app.run_polling()
 
 if __name__ == "__main__":
