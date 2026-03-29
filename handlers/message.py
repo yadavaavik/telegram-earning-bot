@@ -25,7 +25,7 @@ async def msg_handler(update, context):
             return
 
         # max withdraw
-        if user["balance"] > 100:
+        if user["balance"] > 1000:
             await update.message.reply_text("❌ Max withdraw limit reached")
             return
 
