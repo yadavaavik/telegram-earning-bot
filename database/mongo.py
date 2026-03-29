@@ -6,3 +6,6 @@ db = client["earning_bot"]
 
 users = db["users"]
 withdraws = db["withdraws"]
+tasks = db["tasks"]
+completed = db["completed_tasks"]
+bots = db["bots"]
