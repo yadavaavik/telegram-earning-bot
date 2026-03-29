@@ -6,6 +6,10 @@ from handlers.subbot import token_handler
 from modules.security import can_withdraw, set_withdraw_time
 
 MIN_WITHDRAW = 10
+# max withdraw protection
+if user["balance"] > 100:
+    await update.message.reply_text("❌ Max withdraw limit reached")
+    return
 
 @safe_handler
 async def msg_handler(update, context):
