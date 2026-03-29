@@ -9,7 +9,8 @@ def menu():
         [InlineKeyboardButton("💰 Balance", callback_data="balance")],
         [InlineKeyboardButton("👥 Refer", callback_data="refer")],
         [InlineKeyboardButton("🎁 Daily Bonus", callback_data="daily")],
-        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")]
+        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")],
+        [InlineKeyboardButton("🎯 Tasks", callback_data="tasks")]
     ])
 
 @safe_handler
