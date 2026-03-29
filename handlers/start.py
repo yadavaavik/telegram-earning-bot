@@ -1,47 +1,31 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import ContextTypes
-from database.mongo import users
-from utils.force_join import check_join, join_button
-from utils.helpers import safe_handler
+from utils.force_join import check_force_join, get_join_buttons
 
-@safe_handler
+ADMIN_ID = 123456789  # replace with your telegram id
+
+
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    user_id = user.id
 
-    # 👉 Create user if not exists
-    if not await users.find_one({"user_id": user_id}):
-        await users.insert_one({
-            "user_id": user_id,
-            "balance": 0,
-            "referrals": 0,
-            "earned": 0,
-            "withdrawn": 0
-        })
+    # Admin bypass
+    if user.id != ADMIN_ID:
+        joined = await check_force_join(user.id, context)
 
-    # 👉 FORCE JOIN CHECK
-    if not await check_join(context.bot, user_id):
-        await update.message.reply_text(
-            "⚠️ Please join our channel first",
-            reply_markup=join_button()
-        )
-        return
+        if not joined:
+            await update.message.reply_text(
+                "🚫 Please join all required channels first!",
+                reply_markup=get_join_buttons()
+            )
+            return
 
-    # 👉 MAIN MENU
-    keyboard = [
-        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
-        [InlineKeyboardButton("👥 Refer", callback_data="refer")],
-        [InlineKeyboardButton("🧩 Tasks", callback_data="tasks")],
-        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")],
-    ]
-
-    # 👉 Admin button
-    import os
-    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-    if user_id == ADMIN_ID:
-        keyboard.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
-
+    # Main menu
     await update.message.reply_text(
-        "🏠 Main Menu",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "🏠 *Main Menu*\n\n"
+        "💰 Balance\n"
+        "👥 Refer\n"
+        "🧩 Tasks\n"
+        "💸 Withdraw\n"
+        "👑 Admin",
+        parse_mode="Markdown"
     )
