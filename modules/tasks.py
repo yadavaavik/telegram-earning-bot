@@ -1,22 +1,60 @@
-from database.mongo import tasks, completed
-from modules.balance import add_balance
+from db import db
 
+tasks_col = db["tasks"]
+users_col = db["users"]
+
+
+# ✅ GET OR CREATE USER (SAFE)
+async def get_user(user_id):
+    user = await users_col.find_one({"user_id": user_id})
+
+    if not user:
+        user = {
+            "user_id": user_id,
+            "balance": 0,
+            "earned": 0,
+            "withdrawn": 0,
+            "tasks_done": []
+        }
+        await users_col.insert_one(user)
+
+    else:
+        # 🔥 fix old users automatically
+        if "tasks_done" not in user:
+            await users_col.update_one(
+                {"user_id": user_id},
+                {"$set": {"tasks_done": []}}
+            )
+            user["tasks_done"] = []
+
+    return user
+
+
+# ✅ GET ALL ACTIVE TASKS
 async def get_tasks():
-    return [t async for t in tasks.find()]
+    return await tasks_col.find({"active": True}).to_list(length=50)
 
+
+# ✅ COMPLETE TASK (ANTI DUPLICATE)
 async def complete_task(user_id, task):
-    exists = await completed.find_one({
-        "user_id": user_id,
-        "task_id": task["_id"]
-    })
+    user = await get_user(user_id)
 
-    if exists:
-        return False
+    if task["task_id"] in user["tasks_done"]:
+        return False, "already"
 
-    await completed.insert_one({
-        "user_id": user_id,
-        "task_id": task["_id"]
-    })
+    reward = int(task.get("reward", 0))
 
-    await add_balance(user_id, task.get("reward", 1))
-    return True
+    await users_col.update_one(
+        {"user_id": user_id},
+        {
+            "$inc": {
+                "balance": reward,
+                "earned": reward
+            },
+            "$push": {
+                "tasks_done": task["task_id"]
+            }
+        }
+    )
+
+    return True, reward
