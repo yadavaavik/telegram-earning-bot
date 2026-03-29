@@ -1,43 +1,34 @@
 import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-# Get channels from ENV
+
 def get_channels():
-    channels = os.getenv("FORCE_CHANNELS", "")
-    return [ch.strip() for ch in channels.split(",") if ch.strip()]
+    return [ch.strip() for ch in os.getenv("FORCE_CHANNELS", "").split(",") if ch.strip()]
 
 
-# Check if user joined all channels
-async def check_force_join(user_id, context):
+async def is_joined(user_id, context):
     channels = get_channels()
 
     if not channels:
-        return True  # No force join set
+        return True
 
-    for channel in channels:
+    for ch in channels:
         try:
-            member = await context.bot.get_chat_member(channel, user_id)
-
+            member = await context.bot.get_chat_member(ch, user_id)
             if member.status not in ["member", "administrator", "creator"]:
                 return False
-
-        except Exception:
+        except:
             return False
 
     return True
 
 
-# Create join buttons
-def get_join_buttons():
+def join_buttons():
     channels = get_channels()
 
-    buttons = []
-    for ch in channels:
-        buttons.append([
-            InlineKeyboardButton(
-                f"Join {ch}",
-                url=f"https://t.me/{ch.replace('@','')}"
-            )
-        ])
+    buttons = [
+        [InlineKeyboardButton(f"Join {ch}", url=f"https://t.me/{ch.replace('@','')}")]
+        for ch in channels
+    ]
 
     return InlineKeyboardMarkup(buttons)
