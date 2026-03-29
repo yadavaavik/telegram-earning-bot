@@ -162,6 +162,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rank += 1
 
     await query.edit_message_text(text, reply_markup=back_menu())
+
+    top = users.find().sort("user_earned", -1).limit(20)
+
+    text = "🏆 Top 20 Earners\n\n"
+
+    rank = 1
+    for u in top:
+        text += (
+            f"{rank}. {u.get('name','User')} - "
+            f"${round(u.get('user_earned',0),2)}\n"
+        )
+        rank += 1
+
+    await query.edit_message_text(text, reply_markup=back_menu())
     
     # =========================
     # 💰 BALANCE
@@ -179,9 +193,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
    # BAN USER
    # =========================
    elif data == "ban_user":
-        if user_id not in ADMIN_IDS:
-           return
-  
+    if user_id not in ADMIN_IDS:
+        return
+
     context.user_data["ban_mode"] = True
     await query.message.reply_text("🚫 Send USER ID to ban")
 
@@ -452,16 +466,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # =========================
-    # 🚫 BAN USER SYSTEM
-    # =========================
-    if context.user_data.get("ban_mode"):
-        try:
-            target_id = int(text)
+# 🚫 BAN USER SYSTEM
+# =========================
+if context.user_data.get("ban_mode"):
+    try:
+        target_id = int(text)
 
-            users.update_one(
-                 {"user_id": target_id},
-                 {"$set": {"is_banned": True}}
-            )
+        users.update_one(
+            {"user_id": target_id},
+            {"$set": {"is_banned": True}}
+        )
 
         await update.message.reply_text(f"✅ User {target_id} banned")
 
