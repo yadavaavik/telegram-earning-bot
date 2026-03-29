@@ -170,7 +170,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ===== WITHDRAW =====
     elif data == "withdraw":
-        if user["balance"] < MIN_WITHDRAW:
+        if user.get("balance", 0) < MIN_WITHDRAW:
             await query.edit_message_text(f"❌ Min ${MIN_WITHDRAW}", reply_markup=back_menu())
         else:
             context.user_data["awaiting_wallet"] = True
@@ -194,10 +194,78 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id not in ADMIN_IDS:
             return
    
-    context.user_data["broadcast"] = True
-    await query.message.reply_text("📢 Send message to broadcast")
+        context.user_data["broadcast"] = True
+        await query.message.reply_text("📢 Send message to broadcast")
+ 
+    # ===== APPROVE =====
+elif data.startswith("approve_"):
+    if user_id not in ADMIN_IDS:
+        return
 
-        
+    target_id = int(data.split("_")[1])
+
+    req = withdraws.find_one({"user_id": target_id, "status": "pending"})
+    if not req:
+        await query.answer("Already processed")
+        return
+
+    amount = req["amount"]
+
+    withdraws.update_one({"_id": req["_id"]}, {"$set": {"status": "approved"}})
+
+    users.update_one(
+        {"user_id": target_id},
+        {"$inc": {"user_withdrawn": amount}}
+    )
+
+    await context.bot.send_message(target_id, f"✅ Withdraw Approved\n💰 ${amount}")
+    await query.edit_message_text("✅ Approved")
+
+    # ===== REJECT =====
+elif data.startswith("reject_"):
+    if user_id not in ADMIN_IDS:
+        return
+
+    target_id = int(data.split("_")[1])
+
+    req = withdraws.find_one({"user_id": target_id, "status": "pending"})
+    if not req:
+        await query.answer("Already processed")
+        return
+
+    amount = req["amount"]
+
+    withdraws.update_one({"_id": req["_id"]}, {"$set": {"status": "rejected"}})
+
+    users.update_one(
+        {"user_id": target_id},
+        {"$inc": {"balance": amount}}
+    )
+
+    await context.bot.send_message(target_id, "❌ Withdraw Rejected (Refunded)")
+    await query.edit_message_text("❌ Rejected")
+
+
+   # ===== DO TASK =====
+elif data.startswith("do_task_"):
+    task_id = data.split("_")[2]
+
+    task = tasks.find_one({"_id":
+    ObjectId(task_id)})
+
+    if not task:
+        await query.answer("Task not found")
+        return
+
+    await query.edit_message_text(
+        f"🧩 Task: {task['title']}\n\n🔗 {task['link']}\n\nAfter completing send:\n/done_{task_id}",
+        reply_markup=back_menu()
+    )
+
+# optional protection
+if "completed_tasks" not in user:
+    users.update_one({"user_id": user_id}, {"$set": {"completed_tasks": []}})
+    
 # ========= MESSAGE HANDLER =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
