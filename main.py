@@ -119,302 +119,238 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = query.from_user.id
+    data = query.data
+
+    # =========================
+    # 🛡️ SAFE USER LOAD
+    # =========================
     user = users.find_one({"user_id": user_id})
 
-    # Safety: auto-create user if missing (rare case)
     if not user:
         users.insert_one(create_user(user_id, query.from_user.first_name))
         user = users.find_one({"user_id": user_id})
 
-    # Safety: banned users
     if user.get("is_banned", False):
         await query.edit_message_text("🚫 You are banned from using this bot")
         return
-
-    data = query.data
 
     # =========================
     # 🔙 BACK
     # =========================
     if data == "back":
-        await query.edit_message_text(
+        return await query.edit_message_text(
             "🏠 Main Menu",
             reply_markup=main_menu(user_id)
         )
 
     # =========================
-    # TOP USER
-    # =========================
-    elif data == "top_users":
-    if user_id not in ADMIN_IDS:
-        return
-
-    top = users.find().sort("user_earned", -1).limit(20)
-
-    text = "🏆 Top 20 Earners\n\n"
-
-    rank = 1
-    for u in top:
-        text += f"{rank}. {u.get('name','User')} - ${round(u.get('user_earned',0),2)}\n"
-        rank += 1
-
-    await query.edit_message_text(text, reply_markup=back_menu())
-    
-    # =========================
     # 💰 BALANCE
     # =========================
-    elif data == "balance":
-        msg = (
-            f"💰 Balance: ${round(user.get('balance', 0), 2)}\n"
-            f"👥 Referrals: {user.get('referrals', 0)}\n"
-            f"📈 Earned: ${round(user.get('user_earned', 0), 2)}\n"
-            f"💸 Withdrawn: ${round(user.get('user_withdrawn', 0), 2)}"
+    if data == "balance":
+        return await query.edit_message_text(
+            f"💰 Balance: ${round(user.get('balance',0),2)}\n"
+            f"👥 Referrals: {user.get('referrals',0)}\n"
+            f"📈 Earned: ${round(user.get('user_earned',0),2)}\n"
+            f"💸 Withdrawn: ${round(user.get('user_withdrawn',0),2)}",
+            reply_markup=back_menu()
         )
-        await query.edit_message_text(msg, reply_markup=back_menu())
-
-   # =========================
-   # BAN USER
-   # =========================
-   elif data == "ban_user":
-    if user_id not in ADMIN_IDS:
-        return
-
-    context.user_data["ban_mode"] = True
-    await query.message.reply_text("🚫 Send USER ID to ban")
 
     # =========================
     # 👥 REFER
     # =========================
-    elif data == "refer":
+    if data == "refer":
         bot = await context.bot.get_me()
         link = f"https://t.me/{bot.username}?start={user_id}"
 
-        await query.edit_message_text(
+        return await query.edit_message_text(
             f"🔗 Your Referral Link:\n\n{link}\n\n"
-            f"Earn ${REFERRAL_REWARD} per referral 💸",
+            f"💰 Earn ${REFERRAL_REWARD} per referral",
             reply_markup=back_menu()
         )
 
     # =========================
     # 🧩 TASK LIST
     # =========================
-    elif data == "tasks":
+    if data == "tasks":
         all_tasks = list(tasks.find({}, {"title": 1, "reward": 1}))
 
         if not all_tasks:
-            await query.edit_message_text(
-                "❌ No tasks available right now",
+            return await query.edit_message_text(
+                "❌ No tasks available",
                 reply_markup=back_menu()
             )
-            return
 
-        keyboard = []
-        for t in all_tasks:
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{t['title']} (${t['reward']})",
-                    callback_data=f"do_task_{t['_id']}"
-                )
-            ])
+        keyboard = [
+            [InlineKeyboardButton(f"{t['title']} (${t['reward']})", callback_data=f"do_task_{t['_id']}")]
+            for t in all_tasks
+        ]
 
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back")])
 
-        await query.edit_message_text(
-            "🧩 Available Tasks:\n\nComplete tasks and earn 💰",
+        return await query.edit_message_text(
+            "🧩 Complete tasks & earn 💰",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
     # =========================
     # 🧩 OPEN TASK
     # =========================
-    elif data.startswith("do_task_"):
+    if data.startswith("do_task_"):
         task_id = data.split("_")[2]
 
         try:
             task = tasks.find_one({"_id": ObjectId(task_id)})
         except:
-            await query.answer("Invalid task ID")
-            return
+            return await query.answer("Invalid task")
 
         if not task:
-            await query.answer("Task not found")
-            return
+            return await query.answer("Task not found")
 
-        await query.edit_message_text(
+        return await query.edit_message_text(
             f"🧩 {task['title']}\n\n"
             f"🔗 {task['link']}\n\n"
             f"💰 Reward: ${task['reward']}\n\n"
-            f"After completing, send:\n/done_{task_id}",
+            f"📌 Send: /done_{task_id}",
             reply_markup=back_menu()
         )
 
     # =========================
     # 💸 WITHDRAW
     # =========================
-    elif data == "withdraw":
+    if data == "withdraw":
         balance = user.get("balance", 0)
 
         if balance < MIN_WITHDRAW:
-            await query.edit_message_text(
-                f"❌ Minimum withdraw is ${MIN_WITHDRAW}\n\n"
-                f"Your Balance: ${balance}",
+            return await query.edit_message_text(
+                f"❌ Min withdraw: ${MIN_WITHDRAW}\nYour Balance: ${balance}",
                 reply_markup=back_menu()
             )
-            return
 
         context.user_data["awaiting_wallet"] = True
-        await query.message.reply_text(
-            f"💳 Send your wallet / UPI\n\n💰 Amount: ${balance}"
+
+        return await query.message.reply_text(
+            f"💳 Send wallet / UPI\n💰 Amount: ${balance}"
         )
 
     # =========================
     # 👑 ADMIN PANEL
     # =========================
-    elif data == "admin":
+    if data == "admin":
         if user_id not in ADMIN_IDS:
             return
 
-        await query.edit_message_text(
+        return await query.edit_message_text(
             "👑 Admin Panel",
             reply_markup=admin_menu()
         )
 
-    elif data.startswith("ban_"):
-        if user_id not in ADMIN_IDS:
-            return
-
-        target_id = int(data.split("_")[1])
-
-        users.update_one(
-            {"user_id": target_id},
-            {"$set": {"is_banned": True}}
-        )
-
-        await query.edit_message_text("🚫 User banned")
-
     # =========================
-    # ➕ ADD TASK
+    # 📊 STATS
     # =========================
-    elif data == "add_task":
-        if user_id not in ADMIN_IDS:
-            return
-
-        context.user_data["add_task"] = True
-        await query.message.reply_text(
-            "📌 Send task in format:\n\nTitle | Link | Reward"
-        )
-
-    # =========================
-    # 📢 BROADCAST
-    # =========================
-    elif data == "broadcast":
-        if user_id not in ADMIN_IDS:
-            return
-
-        context.user_data["broadcast"] = True
-        await query.message.reply_text("📢 Send message to broadcast")
-
-    # =========================
-    # 📊 STATS (OPTIMIZED)
-    # =========================
-    elif data == "stats":
+    if data == "stats":
         if user_id not in ADMIN_IDS:
             return
 
         total_users = users.count_documents({})
 
-        total_earned = 0
-        total_withdrawn = 0
+        total_earned = sum(u.get("user_earned", 0) for u in users.find({}, {"user_earned":1}))
+        total_withdrawn = sum(u.get("user_withdrawn", 0) for u in users.find({}, {"user_withdrawn":1}))
 
-        for u in users.find({}, {"user_earned": 1, "user_withdrawn": 1}):
-            total_earned += u.get("user_earned", 0)
-            total_withdrawn += u.get("user_withdrawn", 0)
-
-        profit = total_earned - total_withdrawn
-
-        await query.edit_message_text(
-            f"📊 Admin Stats\n\n"
+        return await query.edit_message_text(
+            f"📊 Stats\n\n"
             f"👥 Users: {total_users}\n"
-            f"📈 Earned: ${round(total_earned, 2)}\n"
-            f"💸 Withdrawn: ${round(total_withdrawn, 2)}\n"
-            f"💰 Profit: ${round(profit, 2)}",
+            f"📈 Earned: ${round(total_earned,2)}\n"
+            f"💸 Withdrawn: ${round(total_withdrawn,2)}\n"
+            f"💰 Profit: ${round(total_earned-total_withdrawn,2)}",
             reply_markup=back_menu()
         )
 
     # =========================
-    # ✅ APPROVE WITHDRAW
+    # 🏆 TOP USERS
     # =========================
-    elif data.startswith("approve_"):
+    if data == "top_users":
+        if user_id not in ADMIN_IDS:
+            return
+
+        top = users.find().sort("user_earned", -1).limit(20)
+
+        text = "🏆 Top 20 Earners\n\n"
+        for i, u in enumerate(top, 1):
+            text += f"{i}. {u.get('name','User')} - ${round(u.get('user_earned',0),2)}\n"
+
+        return await query.edit_message_text(text, reply_markup=back_menu())
+
+    # =========================
+    # 🚫 BAN USER
+    # =========================
+    if data == "ban_user":
+        if user_id not in ADMIN_IDS:
+            return
+
+        context.user_data["ban_mode"] = True
+        return await query.message.reply_text("Send USER ID to ban")
+
+    # =========================
+    # ➕ ADD TASK
+    # =========================
+    if data == "add_task":
+        if user_id not in ADMIN_IDS:
+            return
+
+        context.user_data["add_task"] = True
+        return await query.message.reply_text("Title | Link | Reward")
+
+    # =========================
+    # 📢 BROADCAST
+    # =========================
+    if data == "broadcast":
+        if user_id not in ADMIN_IDS:
+            return
+
+        context.user_data["broadcast"] = True
+        return await query.message.reply_text("Send message to broadcast")
+
+    # =========================
+    # ✅ APPROVE
+    # =========================
+    if data.startswith("approve_"):
         if user_id not in ADMIN_IDS:
             return
 
         target_id = int(data.split("_")[1])
-
-        req = withdraws.find_one({
-            "user_id": target_id,
-            "status": "pending"
-        })
+        req = withdraws.find_one({"user_id": target_id, "status": "pending"})
 
         if not req:
-            await query.answer("Already processed")
-            return
+            return await query.answer("Already done")
 
         amount = req["amount"]
 
-        withdraws.update_one(
-            {"_id": req["_id"]},
-            {"$set": {"status": "approved"}}
-        )
+        withdraws.update_one({"_id": req["_id"]}, {"$set": {"status": "approved"}})
+        users.update_one({"user_id": target_id}, {"$inc": {"user_withdrawn": amount}})
 
-        users.update_one(
-            {"user_id": target_id},
-            {"$inc": {"user_withdrawn": amount}}
-        )
-
-        await context.bot.send_message(
-            target_id,
-            f"✅ Withdraw Approved\n💰 ${amount}"
-        )
-
-        await query.edit_message_text("✅ Approved")
+        await context.bot.send_message(target_id, f"✅ Approved\n💰 ${amount}")
+        return await query.edit_message_text("✅ Done")
 
     # =========================
-    # ❌ REJECT WITHDRAW
+    # ❌ REJECT
     # =========================
-    elif data.startswith("reject_"):
+    if data.startswith("reject_"):
         if user_id not in ADMIN_IDS:
             return
 
         target_id = int(data.split("_")[1])
-
-        req = withdraws.find_one({
-            "user_id": target_id,
-            "status": "pending"
-        })
+        req = withdraws.find_one({"user_id": target_id, "status": "pending"})
 
         if not req:
-            await query.answer("Already processed")
-            return
+            return await query.answer("Already done")
 
         amount = req["amount"]
 
-        withdraws.update_one(
-            {"_id": req["_id"]},
-            {"$set": {"status": "rejected"}}
-        )
+        withdraws.update_one({"_id": req["_id"]}, {"$set": {"status": "rejected"}})
+        users.update_one({"user_id": target_id}, {"$inc": {"balance": amount}})
 
-        users.update_one(
-            {"user_id": target_id},
-            {"$inc": {"balance": amount}}
-        )
-
-        await context.bot.send_message(
-            target_id,
-            "❌ Withdraw Rejected (Amount Refunded)"
-        )
-
-        await query.edit_message_text("❌ Rejected")
-
+        await context.bot.send_message(target_id, "❌ Rejected (Refunded)")
+        return await query.edit_message_text("❌ Done")
 
     
 # ========= MESSAGE HANDLER =========
