@@ -5,7 +5,7 @@ from modules.balance import deduct_balance
 from handlers.subbot import token_handler
 from modules.security import can_withdraw, set_withdraw_time
 
-MIN_WITHDRAW = 10
+MIN_WITHDRAW = 1
 
 @safe_handler
 async def msg_handler(update, context):
