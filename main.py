@@ -119,7 +119,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     user = users.find_one({"user_id": user_id})
 
+    # Safety: auto-create user if missing (rare case)
     if not user:
+        users.insert_one(create_user(user_id, query.from_user.first_name))
+        user = users.find_one({"user_id": user_id})
+
+    # Safety: banned users
+    if user.get("is_banned", False):
+        await query.edit_message_text("🚫 You are banned from using this bot")
         return
 
     data = query.data
@@ -153,7 +160,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         link = f"https://t.me/{bot.username}?start={user_id}"
 
         await query.edit_message_text(
-            f"🔗 Your Referral Link:\n{link}",
+            f"🔗 Your Referral Link:\n\n{link}\n\n"
+            f"Earn ${REFERRAL_REWARD} per referral 💸",
             reply_markup=back_menu()
         )
 
@@ -165,7 +173,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not all_tasks:
             await query.edit_message_text(
-                "❌ No tasks available",
+                "❌ No tasks available right now",
                 reply_markup=back_menu()
             )
             return
@@ -182,12 +190,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back")])
 
         await query.edit_message_text(
-            "🧩 Available Tasks:",
+            "🧩 Available Tasks:\n\nComplete tasks and earn 💰",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
     # =========================
-    # 🧩 DO TASK
+    # 🧩 OPEN TASK
     # =========================
     elif data.startswith("do_task_"):
         task_id = data.split("_")[2]
@@ -203,9 +211,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         await query.edit_message_text(
-            f"🧩 Task: {task['title']}\n\n"
+            f"🧩 {task['title']}\n\n"
             f"🔗 {task['link']}\n\n"
-            f"After completing send:\n/done_{task_id}",
+            f"💰 Reward: ${task['reward']}\n\n"
+            f"After completing, send:\n/done_{task_id}",
             reply_markup=back_menu()
         )
 
@@ -213,14 +222,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 💸 WITHDRAW
     # =========================
     elif data == "withdraw":
-        if user.get("balance", 0) < MIN_WITHDRAW:
+        balance = user.get("balance", 0)
+
+        if balance < MIN_WITHDRAW:
             await query.edit_message_text(
-                f"❌ Minimum withdraw is ${MIN_WITHDRAW}",
+                f"❌ Minimum withdraw is ${MIN_WITHDRAW}\n\n"
+                f"Your Balance: ${balance}",
                 reply_markup=back_menu()
             )
-        else:
-            context.user_data["awaiting_wallet"] = True
-            await query.message.reply_text("💳 Send your wallet / UPI")
+            return
+
+        context.user_data["awaiting_wallet"] = True
+        await query.message.reply_text(
+            f"💳 Send your wallet / UPI\n\n💰 Amount: ${balance}"
+        )
 
     # =========================
     # 👑 ADMIN PANEL
@@ -243,7 +258,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data["add_task"] = True
         await query.message.reply_text(
-            "Send task in format:\nTitle | Link | Reward"
+            "📌 Send task in format:\n\nTitle | Link | Reward"
         )
 
     # =========================
@@ -255,6 +270,33 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data["broadcast"] = True
         await query.message.reply_text("📢 Send message to broadcast")
+
+    # =========================
+    # 📊 STATS (OPTIMIZED)
+    # =========================
+    elif data == "stats":
+        if user_id not in ADMIN_IDS:
+            return
+
+        total_users = users.count_documents({})
+
+        total_earned = 0
+        total_withdrawn = 0
+
+        for u in users.find({}, {"user_earned": 1, "user_withdrawn": 1}):
+            total_earned += u.get("user_earned", 0)
+            total_withdrawn += u.get("user_withdrawn", 0)
+
+        profit = total_earned - total_withdrawn
+
+        await query.edit_message_text(
+            f"📊 Admin Stats\n\n"
+            f"👥 Users: {total_users}\n"
+            f"📈 Earned: ${round(total_earned, 2)}\n"
+            f"💸 Withdrawn: ${round(total_withdrawn, 2)}\n"
+            f"💰 Profit: ${round(profit, 2)}",
+            reply_markup=back_menu()
+        )
 
     # =========================
     # ✅ APPROVE WITHDRAW
@@ -325,38 +367,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             target_id,
-            "❌ Withdraw Rejected (Refunded)"
+            "❌ Withdraw Rejected (Amount Refunded)"
         )
 
         await query.edit_message_text("❌ Rejected")
 
-    # =========================
-    # 📊 STATS (PRO)
-    # =========================
-    elif data == "stats":
-        if user_id not in ADMIN_IDS:
-            return
 
-        total_users = users.count_documents({})
-
-        total_earned = 0
-        total_withdrawn = 0
-
-        for u in users.find({}, {"user_earned": 1, "user_withdrawn": 1}):
-            total_earned += u.get("user_earned", 0)
-            total_withdrawn += u.get("user_withdrawn", 0)
-
-        profit = total_earned - total_withdrawn
-
-        text = (
-            f"📊 Admin Stats\n\n"
-            f"👥 Total Users: {total_users}\n"
-            f"📈 Total Earned: ${round(total_earned, 2)}\n"
-            f"💸 Total Withdrawn: ${round(total_withdrawn, 2)}\n"
-            f"💰 Net Profit: ${round(profit, 2)}"
-        )
-
-        await query.edit_message_text(text, reply_markup=back_menu())
     
 # ========= MESSAGE HANDLER =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
