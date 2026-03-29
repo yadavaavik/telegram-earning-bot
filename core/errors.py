@@ -1,2 +1,2 @@
 async def error_handler(update, context):
-    print(context.error)
+    print("ERROR:", context.error)
