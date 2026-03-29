@@ -10,6 +10,7 @@ from bson import ObjectId
 
 # ========= CONFIG =========
 logging.basicConfig(level=logging.INFO)
+print("TOKEN:", BOT_TOKEN)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
@@ -261,14 +262,26 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ========= MAIN =========
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    try:
+        if not BOT_TOKEN:
+            print("❌ BOT_TOKEN missing")
+            return
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+        if not MONGO_URI:
+            print("❌ MONGO_URI missing")
+            return
 
-    print("🚀 Bot Running...")
-    app.run_polling()
+        app = Application.builder().token(BOT_TOKEN).build()
+
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CallbackQueryHandler(button))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
+        print("🚀 Bot Running...")
+        app.run_polling()
+
+    except Exception as e:
+        print("FATAL ERROR:", e)
 
 if __name__ == "__main__":
     main()
