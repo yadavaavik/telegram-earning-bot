@@ -120,7 +120,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # ===== BALANCE =====
-        elif query.data == "balance":
+        if query.data == "back":
+    await query.edit_message_text(
+        "🏠 Main Menu",
+        reply_markup=main_menu(user_id)
+    )
+
+elif query.data == "balance":
             msg = (
                 f"💰 Balance: ${round(user['balance'], 2)}\n"
                 f"👥 Referrals: {user['referrals']}\n"
@@ -202,59 +208,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["broadcast"] = True
             await query.message.reply_text("Send message to broadcast")
 
-    except Exception as e:
-        print("BUTTON ERROR:", e)
-
-        # ===== BACK =====
-        if query.data == "back":
-            await query.edit_message_text(
-                "🏠 Main Menu",
-                reply_markup=main_menu(user_id)
-            )
-
-        # ===== BALANCE =====
-        elif query.data == "balance":
-            msg = f"💰 ${round(user['balance'], 2)}\n👥 {user['referrals']} referrals"
-            await query.edit_message_text(msg, reply_markup=back_menu())
-
-        # ===== REFER =====
-        elif query.data == "refer":
-            bot = await context.bot.get_me()
-            link = f"https://t.me/{bot.username}?start={user_id}"
-            await query.edit_message_text(link, reply_markup=back_menu())
-
-        # ===== WITHDRAW =====
-        elif query.data == "withdraw":
-            if user["balance"] < MIN_WITHDRAW:
-                await query.edit_message_text(
-                    f"❌ Minimum ${MIN_WITHDRAW}",
-                    reply_markup=back_menu()
-                )
-            else:
-                context.user_data["awaiting_wallet"] = True
-                await query.message.reply_text("💳 Send your crypto wallet address (USDT / BTC / etc)")
-
-        # ===== ADMIN PANEL =====
-        elif query.data == "admin_panel":
-            if user_id not in ADMIN_IDS:
-                await query.answer("Not allowed ❌", show_alert=True)
-                return
-
-            await query.edit_message_text(
-                "👑 Admin Panel",
-                reply_markup=admin_menu()
-            )
-
-        # ===== BROADCAST =====
-        elif query.data == "broadcast":
-            if user_id not in ADMIN_IDS:
-                return
-
-            context.user_data["broadcast"] = True
-            await query.message.reply_text("Send message to broadcast")
-
-    except Exception as e:
-        print("BUTTON ERROR:", e)
+    
 
 # ========= MESSAGE =========
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
