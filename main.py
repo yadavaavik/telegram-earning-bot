@@ -8,6 +8,9 @@ from telegram.ext import (
 )
 from pymongo import MongoClient
 from bson import ObjectId
+from loader import setup_handlers
+
+setup_handlers(application)  # or app (whatever your variable is)
 
 # ========= CONFIG =========
 logging.basicConfig(level=logging.INFO)
